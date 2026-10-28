@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Session, Settings } from '../types'
 import {
+  DEFAULT_ATTENTION_PREFS,
   DEFAULT_SETTINGS,
+  loadAttentionPrefs,
+  saveAttentionPrefs,
   isValidMinutes,
   loadSessions,
   loadSettings,
@@ -136,6 +139,35 @@ describe('timer state', () => {
       putRaw('timer', data)
       expect(loadTimerState()).toBeUndefined()
     }
+  })
+})
+
+describe('attention prefs', () => {
+  it('defaults to Screen mode with no calibration', () => {
+    expect(loadAttentionPrefs()).toEqual(DEFAULT_ATTENTION_PREFS)
+  })
+
+  it('round-trips a study mode and calibration', () => {
+    const prefs = {
+      studyMode: 'mixed' as const,
+      calibration: { screen: { yawDeg: 1, pitchDeg: -5 }, book: { yawDeg: 0, pitchDeg: -40 } },
+    }
+    saveAttentionPrefs(prefs)
+    expect(loadAttentionPrefs()).toEqual(prefs)
+  })
+
+  it('keeps a screen-only calibration', () => {
+    const prefs = {
+      studyMode: 'screen' as const,
+      calibration: { screen: { yawDeg: 1, pitchDeg: -5 }, book: null },
+    }
+    saveAttentionPrefs(prefs)
+    expect(loadAttentionPrefs()).toEqual(prefs)
+  })
+
+  it('drops an unknown mode or a broken calibration', () => {
+    putRaw('attention', { studyMode: 'sleep', calibration: { screen: { yawDeg: 'x' } } })
+    expect(loadAttentionPrefs()).toEqual(DEFAULT_ATTENTION_PREFS)
   })
 })
 

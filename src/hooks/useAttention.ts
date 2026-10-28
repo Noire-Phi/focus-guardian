@@ -1,161 +1,90 @@
-import type { FaceLandmarker, FaceLandmarkerResult } from '@mediapipe/tasks-vision'
-import { useEffect, useEffectEvent, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-  ATTENTION,
   ATTENTIVE,
+  NO_SIGHTINGS,
   awayForMs,
   readFace,
+  seenRecently,
   updateAttention,
+  updateSightings,
   type AttentionState,
-  type Blendshapes,
-  type Gaze,
+  type Calibration,
+  type Reading,
+  type Sightings,
+  type StudyMode,
 } from '../utils/attention'
-
-// MediaPipe's runtime and model are fetched the first time detection starts, not with the
-// app. Only these files are downloaded; video frames never leave your device.
-const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.0/wasm'
-const MODEL_URL =
-  'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
-
-let landmarkerPromise: Promise<FaceLandmarker> | null = null
-
-/** Loads Face Landmarker once and shares it. Tries the GPU first, then falls back to the CPU. */
-function loadLandmarker(): Promise<FaceLandmarker> {
-  landmarkerPromise ??= (async () => {
-    // Imported here so the ~MB library isn't part of the app's first load
-    const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision')
-    const fileset = await FilesetResolver.forVisionTasks(WASM_URL)
-    const create = (delegate: 'GPU' | 'CPU') =>
-      FaceLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate },
-        runningMode: 'VIDEO',
-        numFaces: 1,
-        outputFaceBlendshapes: true,
-        outputFacialTransformationMatrixes: true,
-      })
-    let landmarker: FaceLandmarker
-    try {
-      landmarker = await create('GPU')
-    } catch {
-      landmarker = await create('CPU')
-    }
-    // The first detection is slow (it sets up the GPU, which can block the page for a
-    // second or more). Do it now, while "Loading" shows, not in the middle of a session.
-    const blank = document.createElement('canvas')
-    blank.width = blank.height = 64
-    landmarker.detectForVideo(blank, performance.now())
-    return landmarker
-  })().catch((err: unknown) => {
-    landmarkerPromise = null // let a retry try again
-    throw err
-  })
-  return landmarkerPromise
-}
-
-function firstFace(result: FaceLandmarkerResult) {
-  if (result.faceLandmarks.length === 0) return null
-  const blendshapes: Blendshapes = {}
-  for (const c of result.faceBlendshapes?.[0]?.categories ?? []) {
-    blendshapes[c.categoryName] = c.score
-  }
-  return { matrix: result.facialTransformationMatrixes?.[0]?.data ?? null, blendshapes }
-}
-
-export type AttentionStatus = 'off' | 'loading' | 'watching' | 'error'
+import type { TrackerFrame } from './useFaceTracker'
 
 /**
- * Watches the video for whether you're looking at the screen, while `enabled`. Calls
- * `onAlert` once each time looking away passes 5 seconds (rules in utils/attention.ts).
+ * Judges camera frames (from useFaceTracker) while `watching`: focused or distracted for
+ * the study mode, and the 5 second rule. Calls `onAlert` once each time being distracted
+ * passes 5 seconds. Rules are in utils/attention.ts.
  */
-export function useAttention(
-  videoRef: RefObject<HTMLVideoElement | null>,
-  enabled: boolean,
-  onAlert: () => void,
-) {
-  const [landmarker, setLandmarker] = useState<FaceLandmarker | null>(null)
-  const [loadFailed, setLoadFailed] = useState(false)
-  const [gaze, setGaze] = useState<Gaze | null>(null)
+export function useAttention({
+  watching,
+  mode,
+  calibration,
+  onAlert,
+}: {
+  watching: boolean
+  mode: StudyMode
+  calibration: Calibration | null
+  onAlert: () => void
+}) {
+  const [reading, setReading] = useState<Reading | null>(null)
   const [attention, setAttention] = useState<AttentionState>(ATTENTIVE)
   const [checkedAt, setCheckedAt] = useState(0)
+  const [bookSeen, setBookSeen] = useState(false)
 
   const attentionRef = useRef<AttentionState>(ATTENTIVE)
+  const sightingsRef = useRef<Sightings>(NO_SIGHTINGS)
 
-  // Load the model the first time it's needed
-  useEffect(() => {
-    if (!enabled || landmarker || loadFailed) return
-    let cancelled = false
-    loadLandmarker().then(
-      (loaded) => {
-        if (!cancelled) setLandmarker(loaded)
-      },
-      () => {
-        if (!cancelled) setLoadFailed(true)
-      },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [enabled, landmarker, loadFailed])
+  function reset() {
+    attentionRef.current = ATTENTIVE
+    sightingsRef.current = NO_SIGHTINGS
+    setAttention(ATTENTIVE)
+    setReading(null)
+    setBookSeen(false)
+  }
 
-  const check = useEffectEvent((model: FaceLandmarker, lastFrame: { time: number }) => {
-    const video = videoRef.current
-
-    // Hidden tab: the tab guard already counts that, and frames may be stale. Start fresh.
-    if (document.hidden) {
-      attentionRef.current = ATTENTIVE
-      setAttention(ATTENTIVE)
-      setGaze(null)
+  function handleFrame(frame: TrackerFrame) {
+    if (!watching) return
+    // Hidden tab: the tab guard already counts that. Start fresh when you're back.
+    if (frame.hidden) {
+      reset()
       return
     }
-    // No new frame since the last check: nothing to do
-    if (!video || video.readyState < 2 || video.currentTime === lastFrame.time) return
-    lastFrame.time = video.currentTime
-
-    const reading = readFace(firstFace(model.detectForVideo(video, performance.now())))
-    // Timed after detecting, so a slow frame can't make looking away seem longer
-    const now = Date.now()
+    if (frame.objects) {
+      sightingsRef.current = updateSightings(sightingsRef.current, frame.objects, frame.at)
+    }
+    const sightings = sightingsRef.current
+    const next = readFace(frame.face, {
+      mode,
+      calibration,
+      phoneSeen: seenRecently(sightings.phoneAt, frame.at),
+    })
     const previous = attentionRef.current
-    const next = updateAttention(previous, reading.gaze, now)
-    attentionRef.current = next
+    const updated = updateAttention(previous, next.gaze, frame.at)
+    attentionRef.current = updated
 
-    if (next.alerting && !previous.alerting) onAlert()
-    setGaze(reading.gaze)
-    setAttention(next)
-    setCheckedAt(now)
-  })
+    if (updated.alerting && !previous.alerting) onAlert()
+    setReading(next)
+    setAttention(updated)
+    setCheckedAt(frame.at)
+    setBookSeen(seenRecently(sightings.bookAt, frame.at))
+  }
 
-  // Check a frame every 200 ms. Each check is scheduled after the previous one finishes,
-  // so slow frames can never pile up.
+  // Start over whenever watching stops or the rules change (mode, calibration)
   useEffect(() => {
-    if (!enabled || !landmarker) return
-    const lastFrame = { time: -1 }
-    let timer: ReturnType<typeof setTimeout>
-    const loop = () => {
-      check(landmarker, lastFrame)
-      timer = setTimeout(loop, ATTENTION.checkEveryMs)
-    }
-    timer = setTimeout(loop, ATTENTION.checkEveryMs)
-    return () => {
-      clearTimeout(timer)
-      attentionRef.current = ATTENTIVE
-      setAttention(ATTENTIVE)
-      setGaze(null)
-    }
-  }, [enabled, landmarker])
-
-  const status: AttentionStatus = !enabled
-    ? 'off'
-    : loadFailed
-      ? 'error'
-      : landmarker
-        ? 'watching'
-        : 'loading'
+    if (!watching) return
+    return reset
+  }, [watching, mode, calibration])
 
   return {
-    status,
-    gaze: enabled ? gaze : null,
-    awayMs: enabled ? awayForMs(attention, checkedAt) : 0,
-    alerting: enabled && attention.alerting,
-    retry: () => setLoadFailed(false),
+    handleFrame,
+    reading: watching ? reading : null,
+    bookSeen: watching && bookSeen,
+    awayMs: watching ? awayForMs(attention, checkedAt) : 0,
+    alerting: watching && attention.alerting,
   }
 }
