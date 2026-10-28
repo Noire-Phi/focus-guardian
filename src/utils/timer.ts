@@ -94,6 +94,42 @@ export function resume(state: TimerState, now: number): TimerState {
   return { ...state, endsAt: now + state.pausedRemainingMs, pausedRemainingMs: null }
 }
 
+/**
+ * Puts the current phase back to its full length (using the current settings). A paused
+ * timer stays paused; a running one keeps running. A focus session keeps its intention,
+ * tab leaves and distractions.
+ */
+export function reset(state: TimerState, settings: Settings, now: number): TimerState {
+  if (state.phase === 'idle') return state
+  const fullMs = phaseDurationMs(state.phase, settings)
+  const session =
+    state.session && state.phase === 'focus'
+      ? { ...state.session, plannedMinutes: settings.focusMinutes }
+      : state.session
+  return isPaused(state)
+    ? { ...state, pausedRemainingMs: fullMs, session }
+    : { ...state, endsAt: now + fullMs, session }
+}
+
+/**
+ * Jumps to the next phase now. Skipping focus saves the session as not completed and
+ * starts the break; skipping a break goes back to idle.
+ */
+export function skip(state: TimerState, settings: Settings, now: number): Transition {
+  if (state.phase === 'focus') {
+    return {
+      state: {
+        phase: 'break',
+        endsAt: now + phaseDurationMs('break', settings),
+        pausedRemainingMs: null,
+        session: null,
+      },
+      finished: state.session ? finish(state.session, now, false) : null,
+    }
+  }
+  return { state: IDLE, finished: null }
+}
+
 /** Ends whatever is running. Stopping during focus saves the session as not completed. */
 export function stop(state: TimerState, now: number): Transition {
   return {

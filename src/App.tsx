@@ -48,6 +48,8 @@ function App() {
         onStart={startFocus}
         onPause={timer.pause}
         onResume={timer.resume}
+        onReset={timer.reset}
+        onSkip={timer.skip}
         onStop={timer.stop}
       />
       {timer.session && (

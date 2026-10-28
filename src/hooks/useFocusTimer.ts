@@ -82,6 +82,8 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
       act((t) => setState(timer.start(settings, t, crypto.randomUUID(), intention))),
     pause: () => act((t) => setState(timer.pause(state, t))),
     resume: () => act((t) => setState(timer.resume(state, t))),
+    reset: () => act((t) => setState(timer.reset(state, settings, t))),
+    skip: () => act((t) => apply(timer.skip(state, settings, t))),
     stop: () => act((t) => apply(timer.stop(state, t))),
   }
 }
