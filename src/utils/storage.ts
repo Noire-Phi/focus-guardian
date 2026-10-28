@@ -1,4 +1,5 @@
 import type { Distraction, Session, SessionDraft, Settings, TimerState } from '../types'
+import type { Calibration, Pose, StudyMode } from './attention'
 
 // The only module that touches localStorage (see docs/PLAN.md).
 // Saved values are wrapped as { version, data } so later type changes can migrate old data.
@@ -9,6 +10,7 @@ const KEYS = {
   settings: 'focus-guardian:settings',
   sessions: 'focus-guardian:sessions',
   timer: 'focus-guardian:timer',
+  attention: 'focus-guardian:attention',
 } as const
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -159,4 +161,43 @@ export function loadTimerState(): TimerState | undefined {
 
 export function saveTimerState(state: TimerState): boolean {
   return write(KEYS.timer, state)
+}
+
+/** Camera preferences for the focus check: study mode and calibrated positions. */
+export interface AttentionPrefs {
+  studyMode: StudyMode
+  calibration: Calibration | null
+}
+
+export const DEFAULT_ATTENTION_PREFS: AttentionPrefs = { studyMode: 'screen', calibration: null }
+
+const STUDY_MODES: readonly StudyMode[] = ['screen', 'book', 'mixed']
+
+function isPose(value: unknown): value is Pose {
+  return (
+    isRecord(value) &&
+    typeof value.yawDeg === 'number' &&
+    Number.isFinite(value.yawDeg) &&
+    typeof value.pitchDeg === 'number' &&
+    Number.isFinite(value.pitchDeg)
+  )
+}
+
+function isCalibration(value: unknown): value is Calibration {
+  return isRecord(value) && isPose(value.screen) && (value.book === null || isPose(value.book))
+}
+
+export function loadAttentionPrefs(): AttentionPrefs {
+  const data = read(KEYS.attention)
+  if (!isRecord(data)) return { ...DEFAULT_ATTENTION_PREFS }
+  return {
+    studyMode: STUDY_MODES.includes(data.studyMode as StudyMode)
+      ? (data.studyMode as StudyMode)
+      : DEFAULT_ATTENTION_PREFS.studyMode,
+    calibration: isCalibration(data.calibration) ? data.calibration : null,
+  }
+}
+
+export function saveAttentionPrefs(prefs: AttentionPrefs): boolean {
+  return write(KEYS.attention, prefs)
 }

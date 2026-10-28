@@ -21,6 +21,9 @@ No backend and no accounts. Everything runs in the browser and is saved in `loca
    for the current day.
 6. **Settings**: session/break lengths and the end-of-session sound on/off.
 
+**Added after v1**: a camera focus check with study modes (Screen, Book/Paper, Mixed),
+calibration, and book/phone detection. See [ATTENTION.md](ATTENTION.md).
+
 **Later (not in v1)**: weekly history charts, long breaks every 4 sessions, browser
 notifications, exporting data.
 

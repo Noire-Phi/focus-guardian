@@ -376,6 +376,132 @@
   cursor: pointer;
 }
 
+/* Study mode */
+
+.study-mode {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  text-align: left;
+}
+
+.study-mode__legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.study-mode__options {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.study-mode__option {
+  flex: 1;
+  position: relative;
+  cursor: pointer;
+}
+
+.study-mode__option + .study-mode__option {
+  border-left: 1px solid var(--border);
+}
+
+/* The radio stays for keyboard and screen readers; the label is the visible button */
+.study-mode__option input {
+  position: absolute;
+  opacity: 0;
+}
+
+.study-mode__option span {
+  display: block;
+  padding: 8px 6px;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.study-mode__option input:checked + span {
+  color: #fff;
+  background: var(--focus);
+}
+
+.study-mode__option input:focus-visible + span {
+  outline: 2px solid var(--focus);
+  outline-offset: -4px;
+}
+
+.study-mode__hint {
+  margin-top: 6px;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+/* Calibration */
+
+.calibration {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  text-align: left;
+  font-size: 0.9375rem;
+}
+
+.calibration--active {
+  padding: 12px 14px;
+  background: var(--focus-soft);
+  border: 1px solid var(--focus);
+  border-radius: 10px;
+}
+
+.calibration__step {
+  font-weight: 600;
+  color: var(--focus);
+}
+
+.calibration__bar {
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.calibration__fill {
+  height: 100%;
+  background: var(--focus);
+  transition: width 0.2s linear;
+}
+
+.calibration__phase,
+.calibration__summary,
+.calibration__hint {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.calibration__actions {
+  display: flex;
+  gap: 16px;
+}
+
+.calibration__error,
+.calibration__needed {
+  color: var(--error);
+}
+
+.calibration__done {
+  color: var(--break);
+}
+
 /* Fixed at the top so it's seen wherever the page is scrolled */
 .attention-alert {
   position: fixed;

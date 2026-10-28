@@ -1,48 +1,88 @@
-// Decides whether you're looking at the screen, from one Face Landmarker result at a time,
-// and when looking away has gone on long enough to alert. Plain functions with no React
-// or MediaPipe imports, so the rules can be unit tested.
+// Decides whether you're focused, from one camera frame at a time, and when being
+// distracted has gone on long enough to alert. Plain functions with no React or MediaPipe
+// imports, so the rules can be unit tested. See docs/ATTENTION.md for the full picture.
 
-/** Tuning knobs. Angles are in degrees, blendshape scores go from 0 to 1. */
+/** Tuning knobs. Angles are in degrees, scores go from 0 to 1. */
 export const ATTENTION = {
-  // Head turned left/right or tilted up/down further than this counts as away
-  maxYawDeg: 30,
-  maxPitchDeg: 25,
-  // Eyes alone looking far to the side, or far down (e.g. at a phone in your lap)
+  // Head turned further than this to the side of every target = turned sideways
+  sidewaysDeg: 30,
+  // How close the head must point to a target (screen or book) to count as looking at it
+  targetYawDeg: 20,
+  targetPitchDeg: 20,
+  // Eyes alone looking far to the side, or (in Screen mode) far down
   maxEyeSideScore: 0.65,
   maxEyeDownScore: 0.8,
-  // Looking away must last this long before an alert…
+  // Object detector (Book mode): how sure it must be, and how long a sighting counts
+  phoneScore: 0.5,
+  bookScore: 0.4,
+  objectHoldMs: 2000,
+  // Being distracted must last this long before an alert…
   alertAfterMs: 5000,
-  // …and you must look back for this long to clear it, so a flicker doesn't reset it
+  // …and you must be back on task for this long to clear it, so a flicker doesn't reset it
   recoverAfterMs: 1000,
-  // How often to check a video frame. 5 checks a second is plenty for a 5 second rule.
+  // How often to check a frame for your face, and (Book mode) for objects
   checkEveryMs: 200,
+  objectCheckEveryMs: 1000,
 } as const
+
+export type StudyMode = 'screen' | 'book' | 'mixed'
+
+/** Head direction: yaw is turning left/right, pitch is tilting up/down. Signed degrees. */
+export interface Pose {
+  yawDeg: number
+  pitchDeg: number
+}
+
+/** Where your head points when looking at the screen and at your book or paper. */
+export interface Calibration {
+  screen: Pose
+  book: Pose | null
+}
+
+/** Used before calibrating: a camera centred above the screen, so the screen is straight ahead. */
+export const DEFAULT_SCREEN: Pose = { yawDeg: 0, pitchDeg: 0 }
 
 export type Gaze = 'looking' | 'away' | 'no-face'
 
-export interface FaceReading {
+/** Why a frame was judged the way it was; the UI and docs explain each one. */
+export type Reason =
+  | 'on-screen'
+  | 'on-book'
+  | 'between' // Mixed mode: moving between the screen and the book
+  | 'sideways'
+  | 'off-target'
+  | 'eyes-away'
+  | 'no-face'
+  | 'phone'
+
+export interface Reading {
   gaze: Gaze
-  yawDeg: number | null
-  pitchDeg: number | null
+  reason: Reason
+  pose: Pose | null
 }
 
 /** Blendshape scores by name, e.g. { eyeLookOutLeft: 0.12, ... } */
 export type Blendshapes = Record<string, number>
 
+export interface Face {
+  matrix: number[] | null
+  blendshapes: Blendshapes
+}
+
 /**
- * Head turn (yaw) and tilt (pitch) from Face Landmarker's 4×4 facial transformation
- * matrix. Only the size of each angle is used, which comes out the same whether the
- * matrix is stored row- or column-major.
+ * Head yaw and pitch from Face Landmarker's 4×4 facial transformation matrix (read as
+ * column-major, MediaPipe's layout). Which direction counts as positive doesn't matter:
+ * calibration records your own screen and book angles, and readings are compared to those.
  */
-export function headPose(matrix: number[]): { yawDeg: number; pitchDeg: number } {
-  // Rotation part, reading the matrix as column-major (MediaPipe's layout)
+export function headPose(matrix: number[]): Pose {
   const r20 = matrix[2]
   const r21 = matrix[6]
   const r22 = matrix[10]
   const toDeg = 180 / Math.PI
-  const yaw = Math.asin(Math.max(-1, Math.min(1, -r20)))
-  const pitch = Math.atan2(r21, r22)
-  return { yawDeg: Math.abs(yaw * toDeg), pitchDeg: Math.abs(pitch * toDeg) }
+  return {
+    yawDeg: Math.asin(Math.max(-1, Math.min(1, -r20))) * toDeg,
+    pitchDeg: Math.atan2(r21, r22) * toDeg,
+  }
 }
 
 function eyeScores(b: Blendshapes): { side: number; down: number } {
@@ -54,37 +94,125 @@ function eyeScores(b: Blendshapes): { side: number; down: number } {
   return { side: Math.max(lookingLeft, lookingRight), down }
 }
 
-/** One frame: is there a face, and is it pointed at the screen? */
-export function readFace(
-  face: { matrix: number[] | null; blendshapes: Blendshapes } | null,
-): FaceReading {
-  if (!face) return { gaze: 'no-face', yawDeg: null, pitchDeg: null }
+function isNear(pose: Pose, target: Pose): boolean {
+  return (
+    Math.abs(pose.yawDeg - target.yawDeg) <= ATTENTION.targetYawDeg &&
+    Math.abs(pose.pitchDeg - target.pitchDeg) <= ATTENTION.targetPitchDeg
+  )
+}
 
-  const pose = face.matrix ? headPose(face.matrix) : null
+/** Between the screen and the book: within reach of either sideways, and between them vertically. */
+function isBetween(pose: Pose, screen: Pose, book: Pose): boolean {
+  const low = Math.min(screen.pitchDeg, book.pitchDeg)
+  const high = Math.max(screen.pitchDeg, book.pitchDeg)
+  const yawOk =
+    Math.abs(pose.yawDeg - screen.yawDeg) <= ATTENTION.targetYawDeg ||
+    Math.abs(pose.yawDeg - book.yawDeg) <= ATTENTION.targetYawDeg
+  return yawOk && pose.pitchDeg >= low && pose.pitchDeg <= high
+}
+
+/** The study modes that need a calibrated book position before they can run. */
+export function needsBookCalibration(mode: StudyMode, calibration: Calibration | null): boolean {
+  return mode !== 'screen' && !calibration?.book
+}
+
+export interface ReadContext {
+  mode: StudyMode
+  calibration: Calibration | null
+  phoneSeen: boolean
+}
+
+const looking = (reason: Reason, pose: Pose | null): Reading => ({ gaze: 'looking', reason, pose })
+const away = (reason: Reason, pose: Pose | null): Reading => ({ gaze: 'away', reason, pose })
+
+/**
+ * One frame: focused or distracted, and why. Rules, in order:
+ * 1. No face: distracted (you left, or turned fully away).
+ * 2. Book mode and a phone was seen recently: distracted, whatever your head does.
+ * 3. Head turned sideways, away from every target: distracted.
+ * 4. Eyes looking far to the side: distracted.
+ * 5. Head pointing at a target for this mode (screen, book, or in Mixed either one or
+ *    in between): focused. In Screen mode, eyes looking far down count as distracted.
+ * 6. Anything else (e.g. looking up, or at the screen in Book mode): distracted.
+ */
+export function readFace(face: Face | null, ctx: ReadContext): Reading {
+  if (!face) return { gaze: 'no-face', reason: 'no-face', pose: null }
+  if (ctx.mode === 'book' && ctx.phoneSeen) {
+    return away('phone', face.matrix ? headPose(face.matrix) : null)
+  }
+
   const eyes = eyeScores(face.blendshapes)
-  const headAway =
-    pose !== null && (pose.yawDeg > ATTENTION.maxYawDeg || pose.pitchDeg > ATTENTION.maxPitchDeg)
-  const eyesAway = eyes.side > ATTENTION.maxEyeSideScore || eyes.down > ATTENTION.maxEyeDownScore
+  if (!face.matrix) {
+    // No head pose this frame: go by the eyes alone
+    return eyes.side > ATTENTION.maxEyeSideScore
+      ? away('eyes-away', null)
+      : looking(ctx.mode === 'book' ? 'on-book' : 'on-screen', null)
+  }
 
+  const pose = headPose(face.matrix)
+  const screen = ctx.calibration?.screen ?? DEFAULT_SCREEN
+  const book = ctx.calibration?.book ?? null
+  const targets =
+    ctx.mode === 'screen' || !book ? [screen] : ctx.mode === 'book' ? [book] : [screen, book]
+
+  const sideways = targets.every((t) => Math.abs(pose.yawDeg - t.yawDeg) > ATTENTION.sidewaysDeg)
+  if (sideways) return away('sideways', pose)
+  if (eyes.side > ATTENTION.maxEyeSideScore) return away('eyes-away', pose)
+
+  if (ctx.mode === 'screen' || !book) {
+    if (!isNear(pose, screen)) return away('off-target', pose)
+    // Head at the screen but eyes far down: likely a phone or desk below the screen
+    return eyes.down > ATTENTION.maxEyeDownScore
+      ? away('off-target', pose)
+      : looking('on-screen', pose)
+  }
+  if (ctx.mode === 'book') {
+    return isNear(pose, book) ? looking('on-book', pose) : away('off-target', pose)
+  }
+  // Mixed
+  if (isNear(pose, screen)) return looking('on-screen', pose)
+  if (isNear(pose, book)) return looking('on-book', pose)
+  if (isBetween(pose, screen, book)) return looking('between', pose)
+  return away('off-target', pose)
+}
+
+/** Best object scores in one frame from the object detector, 0 when not seen. */
+export interface ObjectScores {
+  book: number
+  phone: number
+}
+
+/** When a phone and a book were last seen, so one missed detection doesn't drop them. */
+export interface Sightings {
+  phoneAt: number | null
+  bookAt: number | null
+}
+
+export const NO_SIGHTINGS: Sightings = { phoneAt: null, bookAt: null }
+
+export function updateSightings(s: Sightings, objects: ObjectScores, now: number): Sightings {
   return {
-    gaze: headAway || eyesAway ? 'away' : 'looking',
-    yawDeg: pose?.yawDeg ?? null,
-    pitchDeg: pose?.pitchDeg ?? null,
+    phoneAt: objects.phone >= ATTENTION.phoneScore ? now : s.phoneAt,
+    bookAt: objects.book >= ATTENTION.bookScore ? now : s.bookAt,
   }
 }
 
+export function seenRecently(at: number | null, now: number): boolean {
+  return at !== null && now - at <= ATTENTION.objectHoldMs
+}
+
 export interface AttentionState {
-  awaySince: number | null // when the current stretch of looking away began
-  backSince: number | null // when you looked back, while that's still being confirmed
+  awaySince: number | null // when the current stretch of being distracted began
+  backSince: number | null // when you got back on task, while that's still being confirmed
   alerting: boolean
 }
 
 export const ATTENTIVE: AttentionState = { awaySince: null, backSince: null, alerting: false }
 
 /**
- * Feeds one reading into the 5 second rule. No face counts as away (you left, or turned
- * fully). Looking back must last `recoverAfterMs` to end a stretch, so a brief glance
- * at the screen, or one misread frame, doesn't restart the count.
+ * Feeds one reading into the 5 second rule. Getting back on task must last
+ * `recoverAfterMs` to end a stretch, so a brief glance back, or one misread frame,
+ * doesn't restart the count.
  */
 export function updateAttention(
   state: AttentionState,
@@ -104,7 +232,7 @@ export function updateAttention(
   return { ...state, backSince }
 }
 
-/** How long the current stretch of looking away has lasted (0 when you're looking). */
+/** How long the current stretch of being distracted has lasted (0 when focused). */
 export function awayForMs(state: AttentionState, now: number): number {
   return state.awaySince === null ? 0 : Math.max(0, now - state.awaySince)
 }

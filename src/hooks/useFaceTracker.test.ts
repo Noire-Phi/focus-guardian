@@ -1,0 +1,184 @@
+// @vitest-environment jsdom
+import { act, renderHook } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { poseMatrix } from '../utils/poseMatrix.testutil'
+import { useFaceTracker, type TrackerFrame } from './useFaceTracker'
+
+// A fake MediaPipe: tests choose what each detector returns
+const mp = vi.hoisted(() => ({
+  face: null as unknown,
+  objects: null as unknown,
+  detectFace: vi.fn(),
+  detectObjects: vi.fn(),
+  createFace: vi.fn(),
+  createObjects: vi.fn(),
+}))
+
+vi.mock('@mediapipe/tasks-vision', () => ({
+  FilesetResolver: { forVisionTasks: vi.fn(async () => ({})) },
+  FaceLandmarker: { createFromOptions: mp.createFace },
+  ObjectDetector: { createFromOptions: mp.createObjects },
+}))
+
+const FACE = {
+  faceLandmarks: [[{ x: 0, y: 0, z: 0 }]],
+  faceBlendshapes: [{ categories: [{ categoryName: 'eyeLookOutLeft', score: 0.1 }] }],
+  facialTransformationMatrixes: [{ rows: 4, columns: 4, data: poseMatrix(10, -5) }],
+}
+const NO_FACE = { faceLandmarks: [], faceBlendshapes: [], facialTransformationMatrixes: [] }
+const PHONE_AND_BOOK = {
+  detections: [
+    { categories: [{ categoryName: 'cell phone', score: 0.8 }], keypoints: [] },
+    { categories: [{ categoryName: 'book', score: 0.6 }], keypoints: [] },
+  ],
+}
+
+function makeVideo() {
+  const video = document.createElement('video')
+  Object.defineProperty(video, 'readyState', { get: () => 4 })
+  // A new frame every check: the video's time follows the (fake) clock
+  Object.defineProperty(video, 'currentTime', {
+    configurable: true,
+    get: () => Date.now() / 1000,
+  })
+  return video
+}
+
+async function wait(ms: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms)
+  })
+}
+
+/** Renders the hook and lets the models finish loading. Checks then run every 200 ms. */
+async function setup({ active = true, detectObjects = false } = {}) {
+  const frames: TrackerFrame[] = []
+  const ref = { current: makeVideo() }
+  const hook = renderHook(
+    (props: { active: boolean; detectObjects: boolean }) =>
+      useFaceTracker(ref, { ...props, onFrame: (f) => frames.push(f) }),
+    { initialProps: { active, detectObjects } },
+  )
+  await wait(0)
+  // Forget the warm-up detections that loading runs, so tests count only real checks
+  mp.detectFace.mockClear()
+  mp.detectObjects.mockClear()
+  return { ...hook, frames, ref }
+}
+
+beforeEach(() => {
+  vi.useFakeTimers()
+  mp.face = FACE
+  mp.objects = PHONE_AND_BOOK
+  mp.detectFace.mockReset().mockImplementation(() => mp.face)
+  mp.detectObjects.mockReset().mockImplementation(() => mp.objects)
+  mp.createFace.mockReset().mockImplementation(async () => ({ detectForVideo: mp.detectFace }))
+  mp.createObjects
+    .mockReset()
+    .mockImplementation(async () => ({ detectForVideo: mp.detectObjects }))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+// Loaded models are shared across hook instances, so the loading cases run first
+describe('loading', () => {
+  it('shows an error if face detection cannot load, and can retry', async () => {
+    mp.createFace.mockRejectedValue(new Error('offline'))
+    const { result } = await setup()
+    expect(result.current.status).toBe('error')
+
+    mp.createFace.mockReset().mockImplementation(async () => ({ detectForVideo: mp.detectFace }))
+    act(() => result.current.retry())
+    await wait(0)
+    expect(result.current.status).toBe('ready')
+    // The slow first detection runs during loading, before any real check
+    expect(mp.detectFace).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps face checks running if only the object detector fails', async () => {
+    mp.createObjects.mockRejectedValue(new Error('offline'))
+    const { result, frames } = await setup({ detectObjects: true })
+    expect(result.current.status).toBe('ready')
+    expect(result.current.objectStatus).toBe('error')
+    await wait(400)
+    expect(frames).toHaveLength(2)
+    expect(frames.every((f) => f.objects === null)).toBe(true)
+  })
+
+  it('tries the CPU when the GPU is not available', async () => {
+    mp.createObjects
+      .mockReset()
+      .mockRejectedValueOnce(new Error('no GPU'))
+      .mockImplementation(async () => ({ detectForVideo: mp.detectObjects }))
+    const { result } = await setup({ detectObjects: true })
+    expect(result.current.objectStatus).toBe('ready')
+    const delegates = mp.createObjects.mock.calls.map((c) => c[1].baseOptions.delegate)
+    expect(delegates).toEqual(['GPU', 'CPU'])
+  })
+})
+
+// After setup, the first check runs at 200 ms and then every 200 ms
+describe('useFaceTracker', () => {
+  it('does nothing while inactive', async () => {
+    const { result, frames } = await setup({ active: false })
+    await wait(2000)
+    expect(result.current.status).toBe('off')
+    expect(frames).toHaveLength(0)
+  })
+
+  it('checks the face about 5 times a second and reports what it sees', async () => {
+    const { frames } = await setup()
+    await wait(1000)
+    expect(mp.detectFace).toHaveBeenCalledTimes(5)
+    expect(frames).toHaveLength(5)
+    expect(frames[0].hidden).toBe(false)
+    expect(frames[0].face?.blendshapes).toEqual({ eyeLookOutLeft: 0.1 })
+    expect(frames[0].face?.matrix).toHaveLength(16)
+
+    mp.face = NO_FACE
+    await wait(200)
+    expect(frames.at(-1)?.face).toBeNull()
+  })
+
+  it('skips a check when the video has no new frame', async () => {
+    const { ref, frames } = await setup()
+    Object.defineProperty(ref.current, 'currentTime', { get: () => 1 })
+    await wait(1000)
+    expect(frames).toHaveLength(1)
+  })
+
+  it('looks for objects only when asked, and then once a second', async () => {
+    const off = await setup()
+    await wait(1000)
+    expect(mp.detectObjects).not.toHaveBeenCalled()
+    expect(off.frames.every((f) => f.objects === null)).toBe(true)
+    off.unmount()
+
+    const on = await setup({ detectObjects: true })
+    await wait(2000)
+    expect(mp.detectFace).toHaveBeenCalledTimes(10)
+    expect(mp.detectObjects).toHaveBeenCalledTimes(2)
+    expect(on.frames.find((f) => f.objects)?.objects).toEqual({ phone: 0.8, book: 0.6 })
+  })
+
+  it('reports hidden tabs without running detection', async () => {
+    const { frames } = await setup()
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    await wait(600)
+    expect(mp.detectFace).not.toHaveBeenCalled()
+    expect(frames).toHaveLength(3)
+    expect(frames.every((f) => f.hidden)).toBe(true)
+    hidden.mockRestore()
+  })
+
+  it('stops checking when made inactive', async () => {
+    const { frames, rerender } = await setup()
+    await wait(600)
+    rerender({ active: false, detectObjects: false })
+    const count = frames.length
+    await wait(2000)
+    expect(frames).toHaveLength(count)
+  })
+})
