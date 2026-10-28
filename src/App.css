@@ -272,7 +272,7 @@
 }
 
 .settings__minutes input[aria-invalid='true'] {
-  border-color: #e03131;
+  border-color: var(--error);
 }
 
 .settings__row input[type='checkbox'] {
@@ -284,6 +284,69 @@
 .settings__note {
   font-size: 0.8125rem;
   color: var(--muted);
+}
+
+/* Webcam */
+
+.webcam {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.webcam .section-title {
+  align-self: flex-start;
+}
+
+.webcam__frame {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.webcam__frame--live {
+  background: #000;
+}
+
+.webcam__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Mirror the preview so it moves like a mirror does */
+  transform: scaleX(-1);
+}
+
+.webcam__video[hidden] {
+  display: none;
+}
+
+.webcam__placeholder {
+  color: var(--muted);
+}
+
+.webcam__error {
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 0.9375rem;
+  color: var(--text-strong);
+  background: var(--error-soft);
+  border: 1px solid var(--error);
+  border-radius: 10px;
+}
+
+.webcam__error-title {
+  font-weight: 600;
+  color: var(--error);
 }
 
 /* Controls */
