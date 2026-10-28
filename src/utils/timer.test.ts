@@ -99,6 +99,71 @@ describe('stop', () => {
   })
 })
 
+describe('reset', () => {
+  it('restarts a running focus phase at full length and keeps the session', () => {
+    const withNote = timer.addDistraction(timer.leaveTab(focus, MIN), 2 * MIN, 'phone')
+    const state = timer.reset(withNote, settings, 20 * MIN)
+    expect(state.endsAt).toBe(45 * MIN)
+    expect(timer.isRunning(state)).toBe(true)
+    expect(state.session?.distractions).toHaveLength(1)
+    expect(state.session?.tabLeaves).toBe(1)
+  })
+
+  it('keeps a paused timer paused, with the full length left', () => {
+    const state = timer.reset(timer.pause(focus, 10 * MIN), settings, 50 * MIN)
+    expect(timer.isPaused(state)).toBe(true)
+    expect(timer.displayRemainingMs(state, settings, 99 * MIN)).toBe(25 * MIN)
+  })
+
+  it('restarts a break at the break length', () => {
+    const onBreak = timer.advance(focus, settings, FOCUS_END + 1).state
+    expect(timer.reset(onBreak, settings, FOCUS_END + 3 * MIN).endsAt).toBe(FOCUS_END + 8 * MIN)
+  })
+
+  it('uses the current settings', () => {
+    const longer = { ...settings, focusMinutes: 50 }
+    const state = timer.reset(focus, longer, 10 * MIN)
+    expect(state.endsAt).toBe(60 * MIN)
+    expect(state.session?.plannedMinutes).toBe(50)
+  })
+
+  it('does nothing when idle', () => {
+    expect(timer.reset(timer.IDLE, settings, 0)).toBe(timer.IDLE)
+  })
+})
+
+describe('skip', () => {
+  it('ends focus early (not completed) and starts the break now', () => {
+    const { state, finished } = timer.skip(focus, settings, 10 * MIN)
+    expect(state).toEqual({
+      phase: 'break',
+      endsAt: 15 * MIN,
+      pausedRemainingMs: null,
+      session: null,
+    })
+    expect(finished).toMatchObject({ endedAt: 10 * MIN, completed: false })
+  })
+
+  it('works while paused', () => {
+    const { state, finished } = timer.skip(timer.pause(focus, 5 * MIN), settings, 30 * MIN)
+    expect(state.phase).toBe('break')
+    expect(timer.isRunning(state)).toBe(true)
+    expect(finished?.completed).toBe(false)
+  })
+
+  it('ends a break and goes back to idle', () => {
+    const onBreak = timer.advance(focus, settings, FOCUS_END + 1).state
+    expect(timer.skip(onBreak, settings, FOCUS_END + MIN)).toEqual({
+      state: timer.IDLE,
+      finished: null,
+    })
+  })
+
+  it('does nothing when idle', () => {
+    expect(timer.skip(timer.IDLE, settings, 0)).toEqual({ state: timer.IDLE, finished: null })
+  })
+})
+
 describe('tab guard', () => {
   it('counts a leave once and adds the time away on return', () => {
     let state = timer.leaveTab(focus, 1 * MIN)

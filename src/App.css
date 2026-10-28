@@ -353,12 +353,14 @@
 
 .controls {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
 }
 
 .button {
-  min-width: 120px;
-  padding: 10px 20px;
+  min-width: 88px;
+  padding: 10px 16px;
   font: inherit;
   font-weight: 600;
   color: var(--text-strong);

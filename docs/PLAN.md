@@ -11,7 +11,7 @@ No backend and no accounts. Everything runs in the browser and is saved in `loca
 **Version 1 (MVP)**
 
 1. **Focus timer**: work sessions (default 25 min) and breaks (default 5 min), with
-   start, pause, resume and stop.
+   start, pause, resume, reset (restart the current phase), skip (to the next phase) and stop.
 2. **Intention**: before starting, you write one line saying what you are working on.
 3. **Tab guard**: during a focus session, the app counts each time you leave the tab and
    how long you were gone.

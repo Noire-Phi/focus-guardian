@@ -7,6 +7,8 @@ interface Props {
   onStart: () => void
   onPause: () => void
   onResume: () => void
+  onReset: () => void
+  onSkip: () => void
   onStop: () => void
 }
 
@@ -17,6 +19,8 @@ export function TimerControls({
   onStart,
   onPause,
   onResume,
+  onReset,
+  onSkip,
   onStop,
 }: Props) {
   if (phase === 'idle') {
@@ -45,9 +49,18 @@ export function TimerControls({
           Pause
         </button>
       )}
-      <button type="button" className="button" onClick={onStop}>
-        {phase === 'break' ? 'Skip break' : 'Stop'}
+      <button type="button" className="button" onClick={onReset}>
+        Reset
       </button>
+      <button type="button" className="button" onClick={onSkip}>
+        {phase === 'break' ? 'Skip break' : 'Skip to break'}
+      </button>
+      {/* During a break, skipping and stopping are the same thing */}
+      {phase === 'focus' && (
+        <button type="button" className="button" onClick={onStop}>
+          Stop
+        </button>
+      )}
     </div>
   )
 }
