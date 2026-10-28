@@ -6,6 +6,7 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { TimerControls } from './components/TimerControls'
 import { TimerDisplay } from './components/TimerDisplay'
 import { TodaySummary } from './components/TodaySummary'
+import { Webcam } from './components/Webcam'
 import { useFocusTimer } from './hooks/useFocusTimer'
 import { useLocalStorage } from './hooks/useLocalStorage'
 import type { Session } from './types'
@@ -59,6 +60,7 @@ function App() {
       )}
       <TodaySummary summary={summarizeDay(sessions, timer.now)} />
       <SettingsPanel settings={settings} onChange={setSettings} />
+      <Webcam />
     </main>
   )
 }
