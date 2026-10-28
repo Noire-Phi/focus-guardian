@@ -2,17 +2,19 @@ import { useState } from 'react'
 import './App.css'
 import { DistractionLog } from './components/DistractionLog'
 import { IntentionInput } from './components/IntentionInput'
+import { SettingsPanel } from './components/SettingsPanel'
 import { TimerControls } from './components/TimerControls'
 import { TimerDisplay } from './components/TimerDisplay'
+import { TodaySummary } from './components/TodaySummary'
 import { useFocusTimer } from './hooks/useFocusTimer'
 import { useLocalStorage } from './hooks/useLocalStorage'
 import type { Session } from './types'
-import { loadSessions, loadSettings, saveSessions } from './utils/storage'
+import { summarizeDay } from './utils/stats'
+import { loadSessions, loadSettings, saveSessions, saveSettings } from './utils/storage'
 
 function App() {
-  // Read once for now; SettingsPanel (plan step 5) will make these editable
-  const [settings] = useState(loadSettings)
-  const [, setSessions] = useLocalStorage(loadSessions, saveSessions)
+  const [settings, setSettings] = useLocalStorage(loadSettings, saveSettings)
+  const [sessions, setSessions] = useLocalStorage(loadSessions, saveSessions)
   // Kept after a session ends, since the next session is often the same task
   const [intention, setIntention] = useState('')
 
@@ -55,6 +57,8 @@ function App() {
           onAdd={timer.addDistraction}
         />
       )}
+      <TodaySummary summary={summarizeDay(sessions, timer.now)} />
+      <SettingsPanel settings={settings} onChange={setSettings} />
     </main>
   )
 }

@@ -1,11 +1,14 @@
 import { useEffect, useEffectEvent, useState } from 'react'
 import type { Session, Settings } from '../types'
+import { playChime } from '../utils/sound'
 import { loadTimerState, saveTimerState } from '../utils/storage'
 import * as timer from '../utils/timer'
 import { useTabGuard } from './useTabGuard'
 
 // How often the clock re-renders. Under a second so the display never skips a second.
 const TICK_MS = 250
+// Background tabs may tick only about once a minute, so allow a bit more than that
+const CHIME_WINDOW_MS = 90_000
 
 /**
  * Runs the focus/break timer. The rules live in utils/timer.ts; this hook adds the clock
@@ -34,7 +37,11 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
   const tick = useEffectEvent(() => {
     const t = Date.now()
     setNow(t)
-    apply(timer.advance(state, settings, t))
+    const transition = timer.advance(state, settings, t)
+    // Chime when a phase just ended, but not when catching up on one that ended long ago
+    const justEnded = state.endsAt !== null && t - state.endsAt < CHIME_WINDOW_MS
+    if (settings.sound && transition.state.phase !== state.phase && justEnded) playChime()
+    apply(transition)
   })
 
   useEffect(() => {
@@ -67,6 +74,7 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
   return {
     phase: state.phase,
     session: state.session,
+    now,
     remainingMs: timer.displayRemainingMs(state, settings, now),
     isPaused: timer.isPaused(state),
     addDistraction: (note: string) => setState(timer.addDistraction(state, Date.now(), note)),

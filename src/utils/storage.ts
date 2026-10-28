@@ -17,6 +17,17 @@ export const DEFAULT_SETTINGS: Settings = {
   sound: true,
 }
 
+/** Allowed whole-minute ranges, shared by loading and the settings form. */
+export const MINUTE_LIMITS = {
+  focusMinutes: { min: 1, max: 180 },
+  breakMinutes: { min: 1, max: 60 },
+} as const
+
+export function isValidMinutes(field: keyof typeof MINUTE_LIMITS, value: unknown): value is number {
+  const { min, max } = MINUTE_LIMITS[field]
+  return Number.isInteger(value) && (value as number) >= min && (value as number) <= max
+}
+
 interface Stored {
   version: number
   data: unknown
@@ -115,10 +126,10 @@ export function loadSettings(): Settings {
   if (!isRecord(data)) return { ...DEFAULT_SETTINGS }
 
   return {
-    focusMinutes: isPositiveNumber(data.focusMinutes)
+    focusMinutes: isValidMinutes('focusMinutes', data.focusMinutes)
       ? data.focusMinutes
       : DEFAULT_SETTINGS.focusMinutes,
-    breakMinutes: isPositiveNumber(data.breakMinutes)
+    breakMinutes: isValidMinutes('breakMinutes', data.breakMinutes)
       ? data.breakMinutes
       : DEFAULT_SETTINGS.breakMinutes,
     sound: typeof data.sound === 'boolean' ? data.sound : DEFAULT_SETTINGS.sound,
