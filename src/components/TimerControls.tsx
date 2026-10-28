@@ -3,17 +3,31 @@ import type { Phase } from '../types'
 interface Props {
   phase: Phase
   isPaused: boolean
+  canStart: boolean
   onStart: () => void
   onPause: () => void
   onResume: () => void
   onStop: () => void
 }
 
-export function TimerControls({ phase, isPaused, onStart, onPause, onResume, onStop }: Props) {
+export function TimerControls({
+  phase,
+  isPaused,
+  canStart,
+  onStart,
+  onPause,
+  onResume,
+  onStop,
+}: Props) {
   if (phase === 'idle') {
     return (
       <div className="controls">
-        <button type="button" className="button button--primary" onClick={onStart}>
+        <button
+          type="button"
+          className="button button--primary"
+          disabled={!canStart}
+          onClick={onStart}
+        >
           Start focus
         </button>
       </div>

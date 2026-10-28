@@ -23,10 +23,15 @@ export interface Settings {
   sound: boolean
 }
 
+// A focus session still in progress: everything except how it ended
+export type SessionDraft = Omit<Session, 'endedAt' | 'completed'>
+
 // The timer stores when the phase ends, not a ticking countdown (see docs/PLAN.md).
 // While paused, endsAt is null and pausedRemainingMs holds the time that was left.
+// `session` is set only during the focus phase.
 export interface TimerState {
   phase: Phase
   endsAt: number | null
   pausedRemainingMs: number | null
+  session: SessionDraft | null
 }

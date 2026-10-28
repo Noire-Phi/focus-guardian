@@ -1,4 +1,4 @@
-import type { Distraction, Session, Settings, TimerState } from '../types'
+import type { Distraction, Session, SessionDraft, Settings, TimerState } from '../types'
 
 // The only module that touches localStorage (see docs/PLAN.md).
 // Saved values are wrapped as { version, data } so later type changes can migrate old data.
@@ -38,15 +38,13 @@ function isDistraction(value: unknown): value is Distraction {
   return isRecord(value) && isNonNegativeNumber(value.at) && typeof value.note === 'string'
 }
 
-function isSession(value: unknown): value is Session {
+function isSessionDraft(value: unknown): value is SessionDraft {
   return (
     isRecord(value) &&
     typeof value.id === 'string' &&
     typeof value.intention === 'string' &&
     isNonNegativeNumber(value.startedAt) &&
-    isNonNegativeNumber(value.endedAt) &&
     isPositiveNumber(value.plannedMinutes) &&
-    typeof value.completed === 'boolean' &&
     isNonNegativeNumber(value.tabLeaves) &&
     isNonNegativeNumber(value.awayMs) &&
     Array.isArray(value.distractions) &&
@@ -54,16 +52,24 @@ function isSession(value: unknown): value is Session {
   )
 }
 
+function isSession(value: unknown): value is Session {
+  if (!isRecord(value)) return false
+  const { endedAt, completed } = value
+  return isSessionDraft(value) && isNonNegativeNumber(endedAt) && typeof completed === 'boolean'
+}
+
 function isTimerState(value: unknown): value is TimerState {
   if (!isRecord(value)) return false
-  const { phase, endsAt, pausedRemainingMs } = value
-  if (phase === 'idle') return endsAt === null && pausedRemainingMs === null
+  const { phase, endsAt, pausedRemainingMs, session } = value
+  if (phase === 'idle') return endsAt === null && pausedRemainingMs === null && session === null
   if (phase !== 'focus' && phase !== 'break') return false
+  // Only the focus phase carries a session in progress
+  const sessionOk = phase === 'focus' ? isSessionDraft(session) : session === null
   // A running or paused phase has exactly one of the two times set
-  return (
+  const timesOk =
     (isNonNegativeNumber(endsAt) && pausedRemainingMs === null) ||
     (endsAt === null && isNonNegativeNumber(pausedRemainingMs))
-  )
+  return sessionOk && timesOk
 }
 
 /** Returns the stored data, or undefined if missing, unreadable or from an unknown version. */
