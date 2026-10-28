@@ -1,4 +1,4 @@
-import type { Distraction, Session, Settings } from '../types'
+import type { Distraction, Session, Settings, TimerState } from '../types'
 
 // The only module that touches localStorage (see docs/PLAN.md).
 // Saved values are wrapped as { version, data } so later type changes can migrate old data.
@@ -8,6 +8,7 @@ export const STORAGE_VERSION = 1
 const KEYS = {
   settings: 'focus-guardian:settings',
   sessions: 'focus-guardian:sessions',
+  timer: 'focus-guardian:timer',
 } as const
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -50,6 +51,18 @@ function isSession(value: unknown): value is Session {
     isNonNegativeNumber(value.awayMs) &&
     Array.isArray(value.distractions) &&
     value.distractions.every(isDistraction)
+  )
+}
+
+function isTimerState(value: unknown): value is TimerState {
+  if (!isRecord(value)) return false
+  const { phase, endsAt, pausedRemainingMs } = value
+  if (phase === 'idle') return endsAt === null && pausedRemainingMs === null
+  if (phase !== 'focus' && phase !== 'break') return false
+  // A running or paused phase has exactly one of the two times set
+  return (
+    (isNonNegativeNumber(endsAt) && pausedRemainingMs === null) ||
+    (endsAt === null && isNonNegativeNumber(pausedRemainingMs))
   )
 }
 
@@ -108,4 +121,14 @@ export function loadSessions(): Session[] {
 
 export function saveSessions(sessions: Session[]): boolean {
   return write(KEYS.sessions, sessions)
+}
+
+/** The running timer, so a reload or reopened tab picks up where it left off. */
+export function loadTimerState(): TimerState | undefined {
+  const data = read(KEYS.timer)
+  return isTimerState(data) ? data : undefined
+}
+
+export function saveTimerState(state: TimerState): boolean {
+  return write(KEYS.timer, state)
 }
