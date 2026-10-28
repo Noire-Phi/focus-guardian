@@ -165,6 +165,127 @@
   color: var(--muted);
 }
 
+/* Sections below the timer */
+
+.section-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.summary,
+.settings {
+  width: 100%;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  text-align: left;
+}
+
+.summary__empty {
+  margin-top: 12px;
+  color: var(--muted);
+}
+
+.summary__grid {
+  margin: 12px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary__stat {
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.summary__stat dt {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.summary__stat dd {
+  margin: 2px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.summary__value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
+.summary__detail {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.settings summary {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.settings summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.settings__body {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings__minutes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.settings__minutes input {
+  width: 72px;
+  padding: 6px 8px;
+  font: inherit;
+  text-align: right;
+  color: var(--text-strong);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.settings__minutes input[aria-invalid='true'] {
+  border-color: #e03131;
+}
+
+.settings__row input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--focus);
+}
+
+.settings__note {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
 /* Controls */
 
 .controls {
