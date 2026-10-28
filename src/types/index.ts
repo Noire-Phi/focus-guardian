@@ -23,8 +23,11 @@ export interface Settings {
   sound: boolean
 }
 
-// A focus session still in progress: everything except how it ended
-export type SessionDraft = Omit<Session, 'endedAt' | 'completed'>
+// A focus session still in progress: everything except how it ended.
+// awaySince is when you left the tab, while you're away; otherwise null.
+export type SessionDraft = Omit<Session, 'endedAt' | 'completed'> & {
+  awaySince: number | null
+}
 
 // The timer stores when the phase ends, not a ticking countdown (see docs/PLAN.md).
 // While paused, endsAt is null and pausedRemainingMs holds the time that was left.

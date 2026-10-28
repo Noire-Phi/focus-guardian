@@ -32,7 +32,10 @@ export function isPaused(state: TimerState): boolean {
 }
 
 function finish(draft: SessionDraft, endedAt: number, completed: boolean): Session {
-  return { ...draft, endedAt, completed }
+  const { awaySince, ...rest } = draft
+  // Still away when the session ended: count the time up to the end
+  const stillAwayMs = awaySince !== null ? Math.max(0, endedAt - awaySince) : 0
+  return { ...rest, awayMs: rest.awayMs + stillAwayMs, endedAt, completed }
 }
 
 /** Starts a focus session. `id` is passed in (not generated here) to keep this function pure. */
@@ -49,7 +52,35 @@ export function start(settings: Settings, now: number, id: string, intention: st
       tabLeaves: 0,
       awayMs: 0,
       distractions: [],
+      awaySince: null,
     },
+  }
+}
+
+/** You left the tab. Counts only while a focus session is running, not paused. */
+export function leaveTab(state: TimerState, now: number): TimerState {
+  const { session } = state
+  if (state.phase !== 'focus' || !isRunning(state) || !session || session.awaySince !== null) {
+    return state
+  }
+  return { ...state, session: { ...session, tabLeaves: session.tabLeaves + 1, awaySince: now } }
+}
+
+/** You came back. Away time is counted up to the end of the session at most. */
+export function returnToTab(state: TimerState, now: number): TimerState {
+  const { session } = state
+  if (!session || session.awaySince === null) return state
+  const backAt = state.endsAt !== null ? Math.min(now, state.endsAt) : now
+  const awayMs = session.awayMs + Math.max(0, backAt - session.awaySince)
+  return { ...state, session: { ...session, awayMs, awaySince: null } }
+}
+
+export function addDistraction(state: TimerState, now: number, note: string): TimerState {
+  const { session } = state
+  if (state.phase !== 'focus' || !session) return state
+  return {
+    ...state,
+    session: { ...session, distractions: [...session.distractions, { at: now, note }] },
   }
 }
 
