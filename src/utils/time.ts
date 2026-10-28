@@ -27,9 +27,12 @@ export function formatClock(ms: number): string {
   return `${minutes}:${ss}`
 }
 
-/** Summary display: "0m", "45m", "1h 30m". Rounds down to whole minutes. */
+/** Summary display: "21s", "45m", "1h 30m". Seconds only under a minute; otherwise rounds down to minutes. */
 export function formatDuration(ms: number): string {
-  const totalMinutes = Math.floor(Math.max(0, ms) / MINUTE)
+  const safeMs = Math.max(0, ms)
+  if (safeMs < MINUTE) return `${Math.floor(safeMs / SECOND)}s`
+
+  const totalMinutes = Math.floor(safeMs / MINUTE)
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
 
@@ -37,6 +40,11 @@ export function formatDuration(ms: number): string {
     return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
   }
   return `${minutes}m`
+}
+
+/** Clock time in the user's locale, e.g. "14:05" or "2:05 PM". */
+export function formatTimeOfDay(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
 /** Midnight (local time) at the start of the day containing `timestamp`. */

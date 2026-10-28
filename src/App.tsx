@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import './App.css'
+import { DistractionLog } from './components/DistractionLog'
 import { IntentionInput } from './components/IntentionInput'
 import { TimerControls } from './components/TimerControls'
 import { TimerDisplay } from './components/TimerDisplay'
@@ -30,9 +31,9 @@ function App() {
     <main className="app">
       <h1 className="app__title">Focus Guardian</h1>
       <TimerDisplay phase={timer.phase} remainingMs={timer.remainingMs} isPaused={timer.isPaused} />
-      {timer.phase === 'focus' ? (
+      {timer.session ? (
         <p className="current-intention">
-          Working on: <strong>{timer.intention}</strong>
+          Working on: <strong>{timer.session.intention}</strong>
         </p>
       ) : (
         <IntentionInput value={intention} onChange={setIntention} onSubmit={startFocus} />
@@ -46,6 +47,14 @@ function App() {
         onResume={timer.resume}
         onStop={timer.stop}
       />
+      {timer.session && (
+        <DistractionLog
+          distractions={timer.session.distractions}
+          tabLeaves={timer.session.tabLeaves}
+          awayMs={timer.session.awayMs}
+          onAdd={timer.addDistraction}
+        />
+      )}
     </main>
   )
 }

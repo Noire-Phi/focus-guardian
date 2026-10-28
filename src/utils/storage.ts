@@ -38,9 +38,9 @@ function isDistraction(value: unknown): value is Distraction {
   return isRecord(value) && isNonNegativeNumber(value.at) && typeof value.note === 'string'
 }
 
-function isSessionDraft(value: unknown): value is SessionDraft {
+// Fields shared by sessions in progress and finished sessions
+function hasSessionFields(value: Record<string, unknown>): boolean {
   return (
-    isRecord(value) &&
     typeof value.id === 'string' &&
     typeof value.intention === 'string' &&
     isNonNegativeNumber(value.startedAt) &&
@@ -52,10 +52,21 @@ function isSessionDraft(value: unknown): value is SessionDraft {
   )
 }
 
+function isSessionDraft(value: unknown): value is SessionDraft {
+  return (
+    isRecord(value) &&
+    hasSessionFields(value) &&
+    (value.awaySince === null || isNonNegativeNumber(value.awaySince))
+  )
+}
+
 function isSession(value: unknown): value is Session {
-  if (!isRecord(value)) return false
-  const { endedAt, completed } = value
-  return isSessionDraft(value) && isNonNegativeNumber(endedAt) && typeof completed === 'boolean'
+  return (
+    isRecord(value) &&
+    hasSessionFields(value) &&
+    isNonNegativeNumber(value.endedAt) &&
+    typeof value.completed === 'boolean'
+  )
 }
 
 function isTimerState(value: unknown): value is TimerState {

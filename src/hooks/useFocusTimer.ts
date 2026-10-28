@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useState } from 'react'
 import type { Session, Settings } from '../types'
 import { loadTimerState, saveTimerState } from '../utils/storage'
 import * as timer from '../utils/timer'
+import { useTabGuard } from './useTabGuard'
 
 // How often the clock re-renders. Under a second so the display never skips a second.
 const TICK_MS = 250
@@ -13,8 +14,12 @@ const TICK_MS = 250
  * twice in development), so the receiver should ignore an id it already has.
  */
 export function useFocusTimer(settings: Settings, onSessionEnd: (session: Session) => void) {
-  // Loaded as saved; the first tick catches up on anything that ended while the app was closed
-  const [state, setState] = useState(() => loadTimerState() ?? timer.IDLE)
+  // Loaded as saved; the first tick catches up on anything that ended while the app was closed.
+  // If the tab was closed mid-session, that counts as time away, ending now.
+  const [state, setState] = useState(() => {
+    const saved = loadTimerState() ?? timer.IDLE
+    return document.visibilityState === 'visible' ? timer.returnToTab(saved, Date.now()) : saved
+  })
   // The time of the last tick. Kept in state so rendering never reads the clock itself.
   const [now, setNow] = useState(() => Date.now())
 
@@ -42,6 +47,16 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
     return () => clearInterval(id)
   }, [running])
 
+  useTabGuard(
+    () => {
+      const next = timer.leaveTab(state, Date.now())
+      setState(next)
+      // Save right away: the tab may be closing, and effects won't get another chance to run
+      saveTimerState(next)
+    },
+    () => setState(timer.returnToTab(state, Date.now())),
+  )
+
   // Each action updates `now` too, so the display is right before the next tick arrives
   function act(update: (t: number) => void) {
     const t = Date.now()
@@ -51,9 +66,10 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
 
   return {
     phase: state.phase,
-    intention: state.session?.intention ?? null,
+    session: state.session,
     remainingMs: timer.displayRemainingMs(state, settings, now),
     isPaused: timer.isPaused(state),
+    addDistraction: (note: string) => setState(timer.addDistraction(state, Date.now(), note)),
     start: (intention: string) =>
       act((t) => setState(timer.start(settings, t, crypto.randomUUID(), intention))),
     pause: () => act((t) => setState(timer.pause(state, t))),
