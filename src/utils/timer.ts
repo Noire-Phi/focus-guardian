@@ -1,4 +1,5 @@
-import type { Phase, Session, SessionDraft, Settings, TimerState } from '../types'
+import type { CameraStats, Phase, Session, SessionDraft, Settings, TimerState } from '../types'
+import { EMPTY_CAMERA_STATS, addCameraStats } from './focusScore'
 import { minutesToMs, remainingMs } from './time'
 
 // Pure timer state machine: idle → focus → break → idle.
@@ -73,6 +74,16 @@ export function returnToTab(state: TimerState, now: number): TimerState {
   const backAt = state.endsAt !== null ? Math.min(now, state.endsAt) : now
   const awayMs = session.awayMs + Math.max(0, backAt - session.awaySince)
   return { ...state, session: { ...session, awayMs, awaySince: null } }
+}
+
+/** Adds camera time (for the focus score) to the session in progress. Focus only. */
+export function addCameraTime(state: TimerState, delta: Partial<CameraStats>): TimerState {
+  const { session } = state
+  if (state.phase !== 'focus' || !session) return state
+  return {
+    ...state,
+    session: { ...session, camera: addCameraStats(session.camera ?? EMPTY_CAMERA_STATS, delta) },
+  }
 }
 
 export function addDistraction(state: TimerState, now: number, note: string): TimerState {

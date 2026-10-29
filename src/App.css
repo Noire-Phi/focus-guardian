@@ -203,6 +203,10 @@
   border-radius: 12px;
 }
 
+.summary__stat--wide {
+  grid-column: 1 / -1;
+}
+
 .summary__stat dt {
   font-size: 0.8125rem;
   color: var(--muted);

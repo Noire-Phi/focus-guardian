@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useState } from 'react'
-import type { Session, Settings } from '../types'
+import type { CameraStats, Session, Settings } from '../types'
 import { playChime } from '../utils/sound'
 import { loadTimerState, saveTimerState } from '../utils/storage'
 import * as timer from '../utils/timer'
@@ -77,6 +77,8 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
     now,
     remainingMs: timer.displayRemainingMs(state, settings, now),
     isPaused: timer.isPaused(state),
+    /** Adds camera time to the session in progress (functional update: safe from timers) */
+    recordCamera: (delta: Partial<CameraStats>) => setState((s) => timer.addCameraTime(s, delta)),
     addDistraction: (note: string) => setState(timer.addDistraction(state, Date.now(), note)),
     start: (intention: string) =>
       act((t) => setState(timer.start(settings, t, crypto.randomUUID(), intention))),

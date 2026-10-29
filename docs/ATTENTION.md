@@ -1,5 +1,7 @@
 # How the focus check works
 
+(How sessions are scored from all this: see [FOCUS_SCORE.md](FOCUS_SCORE.md).)
+
 Focus Guardian uses your webcam to tell whether you're focused on your study material.
 It alerts you after 5 seconds of being distracted, or as soon as a phone is confirmed.
 Everything runs in your browser: video frames never leave your computer.

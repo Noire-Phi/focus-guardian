@@ -15,6 +15,20 @@ export interface Session {
   tabLeaves: number
   awayMs: number // total time spent away from the tab
   distractions: Distraction[]
+  /** What the camera saw, if it was on; missing for sessions without the camera */
+  camera?: CameraStats
+}
+
+/**
+ * Time the camera spent on each thing during a focus session, in milliseconds. The
+ * focus score is worked out from these (utils/focusScore.ts).
+ */
+export interface CameraStats {
+  checkedMs: number // time the focus check was watching you
+  focusedMs: number // …of which you were on task (screen, book, as the study mode says)
+  phoneMs: number // …of which a phone was confirmed
+  postureCheckedMs: number // time posture was checked and your shoulders were visible
+  goodPostureMs: number // …of which your posture was good
 }
 
 export interface Settings {
