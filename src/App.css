@@ -502,14 +502,21 @@
   color: var(--break);
 }
 
-/* Fixed at the top so it's seen wherever the page is scrolled */
-.attention-alert {
+/* Fixed at the top so alerts are seen wherever the page is scrolled; they stack */
+.alert-stack {
   position: fixed;
   top: 16px;
   left: 50%;
   z-index: 10;
   width: min(440px, calc(100% - 32px));
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.attention-alert {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -524,6 +531,22 @@
 
 .attention-alert strong {
   color: var(--error);
+}
+
+/* Posture is a gentler nudge than being distracted */
+.attention-alert--posture {
+  border-color: var(--focus);
+}
+
+.attention-alert--posture strong {
+  color: var(--focus);
+}
+
+.calibration__title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--muted);
 }
 
 /* Controls */

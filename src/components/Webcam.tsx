@@ -3,6 +3,8 @@ import { useAttention } from '../hooks/useAttention'
 import { useCalibration } from '../hooks/useCalibration'
 import { useFaceTracker, type TrackerFrame } from '../hooks/useFaceTracker'
 import { useLocalStorage } from '../hooks/useLocalStorage'
+import { usePosture } from '../hooks/usePosture'
+import { usePostureCalibration } from '../hooks/usePostureCalibration'
 import { useWebcam } from '../hooks/useWebcam'
 import { needsBookCalibration } from '../utils/attention'
 import { playChime } from '../utils/sound'
@@ -10,6 +12,7 @@ import { loadAttentionPrefs, saveAttentionPrefs } from '../utils/storage'
 import { formatDuration } from '../utils/time'
 import { AttentionStatus } from './AttentionStatus'
 import { CalibrationPanel } from './CalibrationPanel'
+import { PosturePanel } from './PosturePanel'
 import { StudyModePicker } from './StudyModePicker'
 
 interface Props {
@@ -26,8 +29,12 @@ export function Webcam({ watchAttention, sound }: Props) {
 
   const cameraOn = camera.status === 'active'
   const calibrate = useCalibration((next) => setPrefs({ ...prefs, calibration: next }))
+  const calibratePosture = usePostureCalibration((posture) => setPrefs({ ...prefs, posture }))
+  const calibrating = calibrate.recording || calibratePosture.recording
   const needsBook = needsBookCalibration(studyMode, calibration)
-  const watching = watchAttention && cameraOn && !calibrate.recording && !needsBook
+  const watching = watchAttention && cameraOn && !calibrating && !needsBook
+  // Posture is checked during a focus session once you've calibrated it, in any mode
+  const watchingPosture = watchAttention && cameraOn && !calibrating && prefs.posture !== null
 
   const attention = useAttention({
     watching,
@@ -38,13 +45,24 @@ export function Webcam({ watchAttention, sound }: Props) {
     },
   })
 
+  const posture = usePosture({
+    watching: watchingPosture,
+    baseline: prefs.posture,
+    onAlert: () => {
+      if (sound) playChime()
+    },
+  })
+
   const tracker = useFaceTracker(videoRef, {
-    active: cameraOn && (watching || calibrate.recording),
+    active: cameraOn && (watching || watchingPosture || calibrating),
     // Phones are looked for in every mode while the focus check runs (not while calibrating)
     detectObjects: watching,
+    detectPose: watchingPosture || calibratePosture.recording,
     onFrame: (frame: TrackerFrame) => {
       attention.handleFrame(frame)
       calibrate.handleFrame(frame)
+      posture.handleFrame(frame)
+      calibratePosture.handleFrame(frame)
     },
   })
 
@@ -81,7 +99,7 @@ export function Webcam({ watchAttention, sound }: Props) {
         )}
       </div>
 
-      {cameraOn && !calibrate.recording && (
+      {cameraOn && !calibrating && (
         <AttentionStatus
           watchAttention={watchAttention}
           needsBook={needsBook}
@@ -133,21 +151,51 @@ export function Webcam({ watchAttention, sound }: Props) {
         onDismiss={calibrate.dismiss}
       />
 
-      {attention.alerting && (
-        <div className="attention-alert" role="alert">
-          {attention.phoneConfirmed ? (
-            <>
-              <strong>Phone detected</strong>
-              <span>Put your phone away to stay focused.</span>
-            </>
-          ) : (
-            <>
-              <strong>Eyes back on your work</strong>
-              <span>You’ve been distracted for {formatDuration(attention.awayMs)}.</span>
-            </>
-          )}
-        </div>
-      )}
+      <PosturePanel
+        baseline={prefs.posture}
+        cameraOn={cameraOn}
+        watchAttention={watchAttention}
+        poseStatus={tracker.poseStatus}
+        reading={posture.reading}
+        badForMs={posture.badForMs}
+        step={calibratePosture.step}
+        phase={calibratePosture.phase}
+        progress={calibratePosture.progress}
+        error={calibratePosture.error}
+        onStart={calibratePosture.start}
+        onCancel={calibratePosture.cancel}
+        onDismiss={calibratePosture.dismiss}
+      />
+
+      {/* Fixed at the top of the window, so alerts are seen wherever the page is scrolled */}
+      <div className="alert-stack">
+        {attention.alerting && (
+          <div className="attention-alert" role="alert">
+            {attention.phoneConfirmed ? (
+              <>
+                <strong>Phone detected</strong>
+                <span>Put your phone away to stay focused.</span>
+              </>
+            ) : (
+              <>
+                <strong>Eyes back on your work</strong>
+                <span>You’ve been distracted for {formatDuration(attention.awayMs)}.</span>
+              </>
+            )}
+          </div>
+        )}
+        {posture.alerting && (
+          <div className="attention-alert attention-alert--posture" role="alert">
+            <strong>Check your posture</strong>
+            <span>
+              {posture.reading?.status === 'bad'
+                ? `${posture.reading.issues.includes('slouching') ? 'You’re slouching' : 'Your posture has drifted'}. `
+                : ''}
+              Sit back up like when you calibrated.
+            </span>
+          </div>
+        )}
+      </div>
     </section>
   )
 }

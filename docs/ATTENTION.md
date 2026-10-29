@@ -153,7 +153,40 @@ never alerts on its own:
 Measured in testing: loading caused one pause of about 0.3 s; during checking, no task
 blocked the page for more than 0.15 s.
 
-## 8. Limitations (worth mentioning when presenting)
+## 8. Posture
+
+A third model, MediaPipe **Pose Landmarker** (the "lite" version), finds 33 points on
+your body. Posture only needs three of them: your **nose** and both **shoulders**. It
+checks posture at most every 500 ms, during a focus session, once you've calibrated.
+
+**Three measurements**, all relative to your shoulders, so they don't change when you
+shift around in the frame:
+
+| Measurement    | What it is                                                    | Catches                                          |
+| -------------- | ------------------------------------------------------------- | ------------------------------------------------ |
+| Head height    | How far your nose is above your shoulders, in shoulder widths | Slouching: your head sinks toward your shoulders |
+| Shoulder width | How wide your shoulders look on camera                        | Leaning in: closer to the camera looks wider     |
+| Shoulder tilt  | How much the line between your shoulders slopes               | Leaning to one side                              |
+
+**Calibrating good posture:** sit the way you want to sit, both shoulders in view, and
+keep still. After 1.5 s to get ready, it measures for 2 s and saves the **median** of
+each measurement. It fails with a clear message if your shoulders weren't visible.
+
+**Comparing** each check with your calibrated posture:
+
+- **Slouching:** head height more than **20% lower**
+- **Leaning in:** shoulders more than **20% wider**
+- **Leaning to one side:** shoulder line sloping more than **10°** more
+
+If Pose can't clearly see your nose or shoulders (visibility below 50%), that check is
+skipped: not counted as good or bad.
+
+**Alerting:** posture drifts slowly, and shifting in your seat for a moment is fine, so
+it uses the same stretch rule as the focus check with longer times: bad posture for
+**20 seconds** in a row before a gentle "Check your posture" alert, and **3 seconds**
+of good posture to clear it. It's separate from the focus alert; both can show at once.
+
+## 9. Limitations (worth mentioning when presenting)
 
 - **Not tuned on real faces yet.** The angle limits (30° sideways, 20° to a target) and
   eye scores are sensible starting points; they're all in the `ATTENTION` object in
@@ -169,9 +202,16 @@ blocked the page for more than 0.15 s.
   3-in-a-row rule reduce false alarms but don't remove them, and a phone held mostly
   out of view, or face down, may never be confirmed.
 
+- **Posture is judged from the front.** A webcam sees head height, shoulder width and
+  tilt well, but not how curved your back is. Big slouches show up; small ones may not.
+
 ## Tuning knobs
 
-All in `ATTENTION` (`utils/attention.ts`) and `CALIBRATION` (`utils/calibration.ts`):
+Posture settings are in `POSTURE` (`utils/posture.ts`): `maxHeadDrop` 0.2,
+`maxLeanIn` 0.2, `maxTiltDeg` 10°, `minVisibility` 0.5, `alertAfterMs` 20 s,
+`recoverAfterMs` 3 s, `checkEveryMs` 500 ms, `minSamples` 3.
+
+The rest are in `ATTENTION` (`utils/attention.ts`) and `CALIBRATION` (`utils/calibration.ts`):
 
 | Setting                              | Value          | Meaning                                       |
 | ------------------------------------ | -------------- | --------------------------------------------- |

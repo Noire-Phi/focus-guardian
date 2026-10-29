@@ -12,12 +12,16 @@ const mp = vi.hoisted(() => ({
   detectObjects: vi.fn(),
   createFace: vi.fn(),
   createObjects: vi.fn(),
+  pose: null as unknown,
+  detectPose: vi.fn(),
+  createPose: vi.fn(),
 }))
 
 vi.mock('@mediapipe/tasks-vision', () => ({
   FilesetResolver: { forVisionTasks: vi.fn(async () => ({})) },
   FaceLandmarker: { createFromOptions: mp.createFace },
   ObjectDetector: { createFromOptions: mp.createObjects },
+  PoseLandmarker: { createFromOptions: mp.createPose },
 }))
 
 const FACE = {
@@ -32,6 +36,9 @@ const PHONE_AND_BOOK = {
     { categories: [{ categoryName: 'book', score: 0.6 }], keypoints: [] },
   ],
 }
+
+const PERSON = { landmarks: [[{ x: 0.5, y: 0.4, z: 0, visibility: 0.9 }]], worldLandmarks: [] }
+const NOBODY = { landmarks: [], worldLandmarks: [] }
 
 function makeVideo() {
   const video = document.createElement('video')
@@ -51,18 +58,19 @@ async function wait(ms: number) {
 }
 
 /** Renders the hook and lets the models finish loading. Checks then run every 200 ms. */
-async function setup({ active = true, detectObjects = false } = {}) {
+async function setup({ active = true, detectObjects = false, detectPose = false } = {}) {
   const frames: TrackerFrame[] = []
   const ref = { current: makeVideo() }
   const hook = renderHook(
-    (props: { active: boolean; detectObjects: boolean }) =>
+    (props: { active: boolean; detectObjects: boolean; detectPose?: boolean }) =>
       useFaceTracker(ref, { ...props, onFrame: (f) => frames.push(f) }),
-    { initialProps: { active, detectObjects } },
+    { initialProps: { active, detectObjects, detectPose } },
   )
   await wait(0)
   // Forget the warm-up detections that loading runs, so tests count only real checks
   mp.detectFace.mockClear()
   mp.detectObjects.mockClear()
+  mp.detectPose.mockClear()
   return { ...hook, frames, ref }
 }
 
@@ -77,6 +85,9 @@ beforeEach(() => {
   mp.createObjects
     .mockReset()
     .mockImplementation(async () => ({ detectForVideo: mp.detectObjects }))
+  mp.pose = PERSON
+  mp.detectPose.mockReset().mockImplementation(() => mp.pose)
+  mp.createPose.mockReset().mockImplementation(async () => ({ detectForVideo: mp.detectPose }))
 })
 
 afterEach(() => {
@@ -184,6 +195,34 @@ describe('useFaceTracker', () => {
     expect(on.frames.find((f) => f.objects)?.objects).toEqual({ phone: 0.8, book: 0.6 })
   })
 
+  it('checks posture only when asked, at most every 500 ms', async () => {
+    const off = await setup()
+    await wait(1000)
+    expect(mp.createPose).not.toHaveBeenCalled()
+    expect(off.frames.every((f) => f.pose === null)).toBe(true)
+    off.unmount()
+
+    const on = await setup({ detectPose: true })
+    expect(on.result.current.poseStatus).toBe('ready')
+    await wait(2000)
+    // On the face checks at 200, 800, 1400 and 2000 ms
+    expect(mp.detectPose).toHaveBeenCalledTimes(4)
+    expect(on.frames.find((f) => f.pose)?.pose?.landmarks).toHaveLength(1)
+
+    mp.pose = NOBODY
+    await wait(600)
+    expect(on.frames.filter((f) => f.pose).at(-1)?.pose).toEqual({ landmarks: null })
+  })
+
+  it('keeps face checks running if the pose model fails to load', async () => {
+    mp.createPose.mockRejectedValue(new Error('offline'))
+    const { result, frames } = await setup({ detectPose: true })
+    expect(result.current.status).toBe('ready')
+    expect(result.current.poseStatus).toBe('error')
+    await wait(400)
+    expect(frames).toHaveLength(2)
+  })
+
   it('reports hidden tabs without running detection', async () => {
     const { frames } = await setup()
     const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
@@ -197,7 +236,7 @@ describe('useFaceTracker', () => {
   it('stops checking when made inactive', async () => {
     const { frames, rerender } = await setup()
     await wait(600)
-    rerender({ active: false, detectObjects: false })
+    rerender({ active: false, detectObjects: false, detectPose: false })
     const count = frames.length
     await wait(2000)
     expect(frames).toHaveLength(count)
