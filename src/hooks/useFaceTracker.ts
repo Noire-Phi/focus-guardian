@@ -25,6 +25,13 @@ let visionPromise: Promise<{ vision: Vision; fileset: unknown }> | null = null
 let facePromise: Promise<FaceLandmarker> | null = null
 let objectsPromise: Promise<ObjectDetector> | null = null
 
+/** Forgets the loaded models. Only for tests, so each test can load from scratch. */
+export function resetModelsForTests() {
+  visionPromise = null
+  facePromise = null
+  objectsPromise = null
+}
+
 function loadVision() {
   visionPromise ??= (async () => {
     // Imported here so the library isn't part of the app's first load
@@ -199,10 +206,15 @@ export function useFaceTracker(
     },
   )
 
+  // When objects are wanted, wait for the object detector too (or for it to fail). Its
+  // slow first run then happens while "Loading" shows, not after checking has started.
+  const objectsSettled = !detectObjects || objectModel !== null || objectsFailed
+  const ready = faceModel !== null && objectsSettled
+
   // Check a frame every 200 ms. Each check is scheduled after the previous one finishes,
   // so slow frames can never pile up.
   useEffect(() => {
-    if (!active || !faceModel) return
+    if (!active || !ready || !faceModel) return
     const last = { frameTime: -1, objectsAt: -Infinity }
     let timer: ReturnType<typeof setTimeout>
     const loop = () => {
@@ -211,15 +223,9 @@ export function useFaceTracker(
     }
     timer = setTimeout(loop, ATTENTION.checkEveryMs)
     return () => clearTimeout(timer)
-  }, [active, faceModel])
+  }, [active, ready, faceModel])
 
-  const status: TrackerStatus = !active
-    ? 'off'
-    : faceFailed
-      ? 'error'
-      : faceModel
-        ? 'ready'
-        : 'loading'
+  const status: TrackerStatus = !active ? 'off' : faceFailed ? 'error' : ready ? 'ready' : 'loading'
   const objectStatus: TrackerStatus =
     !active || !detectObjects ? 'off' : objectsFailed ? 'error' : objectModel ? 'ready' : 'loading'
 

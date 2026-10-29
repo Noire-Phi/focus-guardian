@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   ATTENTIVE,
-  NO_SIGHTINGS,
+  NO_PHONE,
   awayForMs,
   headPose,
   needsBookCalibration,
   readFace,
   seenRecently,
   updateAttention,
-  updateSightings,
+  updateBookSeenAt,
+  updatePhone,
   type AttentionState,
   type Calibration,
   type Gaze,
@@ -24,7 +25,7 @@ const calibration: Calibration = {
 const ctx = (mode: ReadContext['mode'], extra: Partial<ReadContext> = {}): ReadContext => ({
   mode,
   calibration,
-  phoneSeen: false,
+  phoneConfirmed: false,
   ...extra,
 })
 const face = (yaw: number, pitch: number, blendshapes = {}) => ({
@@ -98,8 +99,8 @@ describe('readFace', () => {
       expect(readFace(face(50, -38), ctx('book')).reason).toBe('sideways')
     })
 
-    it('a phone in view is distracted, even while looking down', () => {
-      expect(readFace(face(0, -40), ctx('book', { phoneSeen: true }))).toMatchObject({
+    it('a confirmed phone is distracted, even while looking down', () => {
+      expect(readFace(face(0, -40), ctx('book', { phoneConfirmed: true }))).toMatchObject({
         gaze: 'away',
         reason: 'phone',
       })
@@ -126,10 +127,15 @@ describe('readFace', () => {
       expect(readFace(face(45, -20), ctx('mixed')).reason).toBe('sideways')
       expect(readFace(face(0, 25), ctx('mixed')).reason).toBe('off-target')
     })
+  })
 
-    it('ignores phones (the object detector only runs in Book mode)', () => {
-      expect(readFace(face(0, -40), ctx('mixed', { phoneSeen: true })).reason).toBe('on-book')
-    })
+  it('a confirmed phone is distracted in every mode, whatever the head does', () => {
+    expect(readFace(face(2, -5), ctx('screen', { phoneConfirmed: true })).reason).toBe('phone')
+    expect(readFace(face(0, -40), ctx('mixed', { phoneConfirmed: true })).reason).toBe('phone')
+  })
+
+  it('no face still wins over a phone (nobody is there to hold it)', () => {
+    expect(readFace(null, ctx('book', { phoneConfirmed: true })).reason).toBe('no-face')
   })
 
   it('eyes looking far to the side are distracted in every mode', () => {
@@ -152,14 +158,41 @@ describe('needsBookCalibration', () => {
   })
 })
 
-describe('object sightings', () => {
-  it('remembers a sighting for 2 seconds, so one missed detection does not drop it', () => {
-    let s = updateSightings(NO_SIGHTINGS, { phone: 0.7, book: 0.1 }, 1000)
-    expect(s).toEqual({ phoneAt: 1000, bookAt: null })
-    s = updateSightings(s, { phone: 0.2, book: 0.6 }, 2000)
-    expect(s).toEqual({ phoneAt: 1000, bookAt: 2000 })
-    expect(seenRecently(s.phoneAt, 3000)).toBe(true)
-    expect(seenRecently(s.phoneAt, 3001)).toBe(false)
+describe('updatePhone (confirming a phone)', () => {
+  const feed = (scores: number[]) => scores.reduce(updatePhone, NO_PHONE)
+
+  it('needs 3 confident checks in a row', () => {
+    expect(feed([0.8, 0.9]).confirmed).toBe(false)
+    expect(feed([0.8, 0.9, 0.7])).toEqual({ streak: 3, misses: 0, confirmed: true })
+  })
+
+  it('ignores detections below the 0.5 confidence threshold', () => {
+    expect(feed([0.49, 0.49, 0.49, 0.49]).confirmed).toBe(false)
+    expect(feed([0.5, 0.5, 0.5]).confirmed).toBe(true)
+  })
+
+  it('starts the count over after a check without a phone', () => {
+    expect(feed([0.8, 0.8, 0.1, 0.8, 0.8]).confirmed).toBe(false)
+    expect(feed([0.8, 0.8, 0.1, 0.8, 0.8, 0.8]).confirmed).toBe(true)
+  })
+
+  it('stays confirmed through one missed check, and clears after 2 in a row', () => {
+    const confirmed = feed([0.8, 0.8, 0.8])
+    expect(updatePhone(confirmed, 0.1).confirmed).toBe(true)
+    expect(feed([0.8, 0.8, 0.8, 0.1, 0.8]).confirmed).toBe(true)
+    expect(feed([0.8, 0.8, 0.8, 0.1, 0.1]).confirmed).toBe(false)
+  })
+})
+
+describe('book sightings', () => {
+  it('remembers a book for 2 seconds, so one missed detection does not drop it', () => {
+    let bookAt = updateBookSeenAt(null, { phone: 0, book: 0.3 }, 1000)
+    expect(bookAt).toBeNull()
+    bookAt = updateBookSeenAt(bookAt, { phone: 0, book: 0.6 }, 2000)
+    bookAt = updateBookSeenAt(bookAt, { phone: 0, book: 0.1 }, 2500)
+    expect(bookAt).toBe(2000)
+    expect(seenRecently(bookAt, 4000)).toBe(true)
+    expect(seenRecently(bookAt, 4001)).toBe(false)
     expect(seenRecently(null, 0)).toBe(false)
   })
 })

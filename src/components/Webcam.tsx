@@ -40,8 +40,8 @@ export function Webcam({ watchAttention, sound }: Props) {
 
   const tracker = useFaceTracker(videoRef, {
     active: cameraOn && (watching || calibrate.recording),
-    // The object detector is only needed in Book mode, so it isn't even loaded otherwise
-    detectObjects: watching && studyMode === 'book',
+    // Phones are looked for in every mode while the focus check runs (not while calibrating)
+    detectObjects: watching,
     onFrame: (frame: TrackerFrame) => {
       attention.handleFrame(frame)
       calibrate.handleFrame(frame)
@@ -135,8 +135,17 @@ export function Webcam({ watchAttention, sound }: Props) {
 
       {attention.alerting && (
         <div className="attention-alert" role="alert">
-          <strong>Eyes back on your work</strong>
-          <span>You’ve been distracted for {formatDuration(attention.awayMs)}.</span>
+          {attention.phoneConfirmed ? (
+            <>
+              <strong>Phone detected</strong>
+              <span>Put your phone away to stay focused.</span>
+            </>
+          ) : (
+            <>
+              <strong>Eyes back on your work</strong>
+              <span>You’ve been distracted for {formatDuration(attention.awayMs)}.</span>
+            </>
+          )}
         </div>
       )}
     </section>
