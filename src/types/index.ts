@@ -39,7 +39,11 @@ export interface Settings {
   detections: Detections
   /** How readily the checks flag a distraction (see utils/sensitivity.ts) */
   sensitivity: Sensitivity
+  /** Light or dark, or follow the system */
+  theme: Theme
 }
+
+export type Theme = 'system' | 'light' | 'dark'
 
 export interface Detections {
   lookingAway: boolean // camera: looking away from your screen or book

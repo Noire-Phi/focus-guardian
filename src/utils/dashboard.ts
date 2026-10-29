@@ -72,12 +72,14 @@ export interface DistractionCount {
   count: number
 }
 
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
 export const LEFT_TAB = 'Left the tab'
 export const NO_NOTE = 'No note'
 
 /**
  * The most common distractions: notes you logged, grouped ignoring case and extra spaces
- * ("Phone", "phone " → one entry), plus every time you left the tab. Most common first;
+ * ("Phone", "phone " → one "Phone" entry), plus every time you left the tab. Most common first;
  * ties keep the label that was seen first.
  */
 export function topDistractions(sessions: Session[], limit = 5): DistractionCount[] {
@@ -86,7 +88,7 @@ export function topDistractions(sessions: Session[], limit = 5): DistractionCoun
     const key = label.trim().replace(/\s+/g, ' ').toLowerCase()
     const entry = counts.get(key)
     if (entry) entry.count += by
-    else counts.set(key, { label: label.trim().replace(/\s+/g, ' '), count: by })
+    else counts.set(key, { label: capitalize(label.trim().replace(/\s+/g, ' ')), count: by })
   }
 
   for (const s of sessions) {

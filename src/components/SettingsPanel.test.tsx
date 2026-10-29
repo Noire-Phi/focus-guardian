@@ -45,6 +45,12 @@ describe('SettingsPanel', () => {
     expect(onChange).toHaveBeenCalledWith({ ...DEFAULT_SETTINGS, focusMinutes: 45 })
   })
 
+  it('switches the theme', () => {
+    const onChange = setup()
+    fireEvent.click(screen.getByRole('radio', { name: 'Dark' }))
+    expect(onChange).toHaveBeenCalledWith({ ...DEFAULT_SETTINGS, theme: 'dark' })
+  })
+
   it('resets everything to the defaults', () => {
     const onChange = setup({
       ...DEFAULT_SETTINGS,

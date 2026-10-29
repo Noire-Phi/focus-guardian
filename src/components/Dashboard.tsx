@@ -76,7 +76,7 @@ export function Dashboard({ sessions, now, onGoToTimer }: Props) {
 
 function EmptyDashboard({ onGoToTimer }: { onGoToTimer: () => void }) {
   return (
-    <div className="dashboard-empty">
+    <div className="dashboard-empty card">
       <div className="dashboard-empty__art" aria-hidden="true">
         <svg viewBox="0 0 120 80" width="120" height="80">
           <rect x="10" y="50" width="16" height="20" rx="3" />
@@ -118,7 +118,7 @@ function ChartCard({
   children: React.ReactNode
 }) {
   return (
-    <section className="chart-card">
+    <section className="chart-card card">
       <h2 className="chart-card__title">{title}</h2>
       <p className="chart-card__note">{note}</p>
       {children}
@@ -192,6 +192,7 @@ function WeeklyTrendChart({ points }: { points: PeriodPoint[] }) {
             tension: 0.3,
             spanGaps: true,
             yAxisID: 'score',
+            order: 1,
           },
           {
             label: 'Study hours',
@@ -201,6 +202,8 @@ function WeeklyTrendChart({ points }: { points: PeriodPoint[] }) {
             borderDash: [6, 4],
             tension: 0.3,
             yAxisID: 'hours',
+            // Drawn on top of the score's filled area, so it never disappears behind it
+            order: 0,
           },
         ],
       },
@@ -209,7 +212,12 @@ function WeeklyTrendChart({ points }: { points: PeriodPoint[] }) {
         interaction: { mode: 'index', intersect: false },
         plugins: {
           // Round dots in the legend: a dashed line's default legend box looks broken
-          legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle' } },
+          legend: {
+            position: 'bottom',
+            // Listed by draw order otherwise, which would put study hours first
+            reverse: true,
+            labels: { usePointStyle: true, pointStyle: 'circle' },
+          },
           tooltip: {
             callbacks: {
               label: (ctx) =>

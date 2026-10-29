@@ -142,10 +142,15 @@ describe('topDistractions', () => {
   it('keeps the most common few', () => {
     const notes = ['a', 'b', 'b', 'c', 'c', 'c', 'd', 'e', 'f']
     expect(topDistractions([session(at(9, 29), 25, { notes })], 3).map((d) => d.label)).toEqual([
-      'c',
-      'b',
-      'a',
+      'C',
+      'B',
+      'A',
     ])
+  })
+
+  it('shows each entry starting with a capital, whatever was typed first', () => {
+    const top = topDistractions([session(at(9, 29), 25, { notes: ['phone', 'Phone'] })])
+    expect(top).toEqual([{ label: 'Phone', count: 2 }])
   })
 
   it('is empty when nothing was logged', () => {

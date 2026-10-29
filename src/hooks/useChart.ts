@@ -39,28 +39,48 @@ export interface ChartColors {
   error: string
 }
 
+/**
+ * Reads the design tokens as real colours. The tokens are written with light-dark(), which
+ * only the browser can resolve, so each one is applied to a hidden element and read back.
+ */
 function readColors(): ChartColors {
-  const css = getComputedStyle(document.documentElement)
-  const v = (name: string) => css.getPropertyValue(name).trim()
-  return {
-    text: v('--text'),
-    muted: v('--muted'),
-    grid: v('--border'),
-    focus: v('--focus'),
-    focusSoft: v('--focus-soft'),
-    break: v('--break'),
-    error: v('--error'),
+  const probe = document.createElement('span')
+  probe.style.display = 'none'
+  document.body.appendChild(probe)
+  const resolve = (token: string) => {
+    probe.style.color = `var(${token})`
+    return getComputedStyle(probe).color
   }
+  const colors = {
+    text: resolve('--color-text'),
+    muted: resolve('--color-text-muted'),
+    grid: resolve('--color-border'),
+    focus: resolve('--color-accent'),
+    focusSoft: resolve('--color-accent-soft'),
+    break: resolve('--color-success'),
+    error: resolve('--color-danger'),
+  }
+  probe.remove()
+  return colors
 }
 
-/** Re-reads the colors when the system switches between light and dark mode. */
+/** Re-reads the colours when the system theme changes or the theme setting does. */
 function useThemeColors(): ChartColors {
   const [colors, setColors] = useState(readColors)
   useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
     const update = () => setColors(readColors())
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
     media.addEventListener('change', update)
-    return () => media.removeEventListener('change', update)
+    // The theme setting changes data-theme on <html>
+    const observer = new MutationObserver(update)
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    })
+    return () => {
+      media.removeEventListener('change', update)
+      observer.disconnect()
+    }
   }, [])
   return colors
 }

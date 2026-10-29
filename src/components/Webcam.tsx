@@ -117,7 +117,7 @@ export function Webcam({ watchAttention, settings, onCameraStats }: Props) {
   }, [camera.stream])
 
   return (
-    <section className="webcam" aria-labelledby="webcam-title">
+    <section className="webcam card" aria-labelledby="webcam-title">
       <h2 id="webcam-title" className="section-title">
         Camera
       </h2>

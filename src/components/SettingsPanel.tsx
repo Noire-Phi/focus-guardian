@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Detections, Sensitivity, Settings } from '../types'
+import type { Detections, Sensitivity, Settings, Theme } from '../types'
 import { SENSITIVITY_HINTS } from '../utils/sensitivity'
 import { DEFAULT_SETTINGS, isValidMinutes, MINUTE_LIMITS } from '../utils/storage'
 
@@ -17,6 +17,12 @@ const DETECTIONS: { key: keyof Detections; label: string; hint: string }[] = [
   { key: 'tabLeaves', label: 'Leaving the tab', hint: 'Switching to another tab or app' },
 ]
 
+const THEMES: { value: Theme; label: string }[] = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+]
+
 const SENSITIVITIES: { value: Sensitivity; label: string }[] = [
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
@@ -30,7 +36,7 @@ export function SettingsPanel({ settings, onChange }: Props) {
     onChange({ ...settings, detections: { ...settings.detections, [key]: on } })
 
   return (
-    <details className="settings">
+    <details className="settings card">
       <summary className="section-title">Settings</summary>
       <div className="settings__body" key={resetCount}>
         <fieldset className="settings__group">
@@ -48,6 +54,24 @@ export function SettingsPanel({ settings, onChange }: Props) {
             onChange={(breakMinutes) => onChange({ ...settings, breakMinutes })}
           />
           <p className="settings__note">Changes apply from the next focus session or break.</p>
+        </fieldset>
+
+        <fieldset className="settings__group">
+          <legend>Appearance</legend>
+          <div className="settings__segmented" role="radiogroup" aria-label="Theme">
+            {THEMES.map((t) => (
+              <label key={t.value}>
+                <input
+                  type="radio"
+                  name="theme"
+                  value={t.value}
+                  checked={settings.theme === t.value}
+                  onChange={() => onChange({ ...settings, theme: t.value })}
+                />
+                <span>{t.label}</span>
+              </label>
+            ))}
+          </div>
         </fieldset>
 
         <fieldset className="settings__group">
