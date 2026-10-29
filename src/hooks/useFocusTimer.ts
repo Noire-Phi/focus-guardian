@@ -56,6 +56,8 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
 
   useTabGuard(
     () => {
+      // Tab leaves switched off in Settings: don't count them
+      if (!settings.detections.tabLeaves) return
       const next = timer.leaveTab(state, Date.now())
       setState(next)
       // Save right away: the tab may be closing, and effects won't get another chance to run

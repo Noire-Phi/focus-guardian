@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ATTENTIVE, awayForMs, updateAttention, type AttentionState } from '../utils/attention'
 import {
   POSTURE,
+  type PostureRules,
   comparePosture,
   measurePosture,
   type PostureMetrics,
@@ -25,10 +26,13 @@ export function usePosture({
   baseline,
   onAlert,
   onMeasure,
+  rules = POSTURE,
 }: {
   watching: boolean
   baseline: PostureMetrics | null
   onAlert: () => void
+  /** Thresholds for the chosen sensitivity */
+  rules?: PostureRules
   /** Gets the time each posture check stands for, for the focus score */
   onMeasure?: (delta: Partial<CameraStats>) => void
 }) {
@@ -56,7 +60,7 @@ export function usePosture({
     // Posture is only measured on some checks (every 500 ms)
     if (!frame.pose) return
 
-    const next = comparePosture(measurePosture(frame.pose.landmarks), baseline)
+    const next = comparePosture(measurePosture(frame.pose.landmarks), baseline, rules)
     setReading(next)
     const span = frameSpanMs(lastAtRef.current, frame.at, MAX_POSTURE_SPAN_MS)
     lastAtRef.current = frame.at
@@ -69,7 +73,7 @@ export function usePosture({
       previous,
       next.status === 'good' ? 'looking' : 'away',
       frame.at,
-      POSTURE,
+      rules,
     )
     stateRef.current = updated
     if (updated.alerting && !previous.alerting) onAlert()
@@ -81,7 +85,7 @@ export function usePosture({
   useEffect(() => {
     if (!active) return
     return reset
-  }, [active, baseline])
+  }, [active, baseline, rules])
 
   return {
     handleFrame,

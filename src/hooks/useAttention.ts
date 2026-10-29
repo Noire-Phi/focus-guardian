@@ -8,6 +8,8 @@ import {
   updateAttention,
   updateBookSeenAt,
   updatePhone,
+  ATTENTION,
+  type AttentionRules,
   type AttentionState,
   type Calibration,
   type PhoneTracker,
@@ -33,11 +35,19 @@ export function useAttention({
   calibration,
   onAlert,
   onMeasure,
+  rules = ATTENTION,
+  checkGaze = true,
+  checkPhone = true,
 }: {
   watching: boolean
   mode: StudyMode
   calibration: Calibration | null
   onAlert: () => void
+  /** Thresholds for the chosen sensitivity */
+  rules?: AttentionRules
+  /** Settings switches: the looking-away check and the phone check */
+  checkGaze?: boolean
+  checkPhone?: boolean
   /** Gets the time each check stands for, for the focus score */
   onMeasure?: (delta: Partial<CameraStats>) => void
 }) {
@@ -71,15 +81,22 @@ export function useAttention({
       return
     }
     // Object results arrive on some frames only (every 500 ms); the counts move then
-    if (frame.objects) {
-      phoneRef.current = updatePhone(phoneRef.current, frame.objects.phone)
+    if (frame.objects && checkPhone) {
+      phoneRef.current = updatePhone(phoneRef.current, frame.objects.phone, rules)
       bookAtRef.current = updateBookSeenAt(bookAtRef.current, frame.objects, frame.at)
     }
     const phone = phoneRef.current
-    const next = readFace(frame.face, { mode, calibration, phoneConfirmed: phone.confirmed })
+    const next: Reading = checkGaze
+      ? readFace(frame.face, { mode, calibration, phoneConfirmed: phone.confirmed, rules })
+      : // Looking-away check off: only a confirmed phone counts
+        {
+          gaze: phone.confirmed ? 'away' : 'looking',
+          reason: phone.confirmed ? 'phone' : 'unchecked',
+          pose: null,
+        }
 
     const previous = attentionRef.current
-    const stepped = updateAttention(previous, next.gaze, frame.at)
+    const stepped = updateAttention(previous, next.gaze, frame.at, rules)
     // A confirmed phone alerts right away: seeing it several checks in a row is already
     // the guard against false alarms, so it doesn't also wait for the 5 seconds
     const updated = phone.confirmed ? { ...stepped, alerting: true } : stepped
@@ -88,11 +105,13 @@ export function useAttention({
     if (updated.alerting && !previous.alerting) onAlert()
     const span = frameSpanMs(lastAtRef.current, frame.at, MAX_FRAME_SPAN_MS)
     lastAtRef.current = frame.at
-    onMeasure?.({
-      checkedMs: span,
-      focusedMs: next.gaze === 'looking' ? span : 0,
-      phoneMs: phone.confirmed ? span : 0,
-    })
+    // The focus score needs the looking-away check: without it, "on task" isn't known
+    if (checkGaze)
+      onMeasure?.({
+        checkedMs: span,
+        focusedMs: next.gaze === 'looking' ? span : 0,
+        phoneMs: phone.confirmed ? span : 0,
+      })
     setReading(next)
     setAttention(updated)
     setCheckedAt(frame.at)
@@ -100,11 +119,11 @@ export function useAttention({
     setBookSeen(mode === 'book' && seenRecently(bookAtRef.current, frame.at))
   }
 
-  // Start over whenever watching stops or the rules change (mode, calibration)
+  // Start over whenever watching stops or the rules change (mode, calibration, settings)
   useEffect(() => {
     if (!watching) return
     return reset
-  }, [watching, mode, calibration])
+  }, [watching, mode, calibration, rules, checkGaze, checkPhone])
 
   return {
     handleFrame,

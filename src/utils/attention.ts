@@ -31,6 +31,9 @@ export const ATTENTION = {
   objectCheckEveryMs: 500,
 } as const
 
+/** The same knobs as ATTENTION, as plain numbers, so a sensitivity level can change them. */
+export type AttentionRules = { [K in keyof typeof ATTENTION]: number }
+
 export type StudyMode = 'screen' | 'book' | 'mixed'
 
 /** Head direction: yaw is turning left/right, pitch is tilting up/down. Signed degrees. */
@@ -60,6 +63,7 @@ export type Reason =
   | 'eyes-away'
   | 'no-face'
   | 'phone'
+  | 'unchecked' // the looking-away check is off: only phones are watched for
 
 export interface Reading {
   gaze: Gaze
@@ -100,20 +104,20 @@ function eyeScores(b: Blendshapes): { side: number; down: number } {
   return { side: Math.max(lookingLeft, lookingRight), down }
 }
 
-function isNear(pose: Pose, target: Pose): boolean {
+function isNear(pose: Pose, target: Pose, rules: AttentionRules): boolean {
   return (
-    Math.abs(pose.yawDeg - target.yawDeg) <= ATTENTION.targetYawDeg &&
-    Math.abs(pose.pitchDeg - target.pitchDeg) <= ATTENTION.targetPitchDeg
+    Math.abs(pose.yawDeg - target.yawDeg) <= rules.targetYawDeg &&
+    Math.abs(pose.pitchDeg - target.pitchDeg) <= rules.targetPitchDeg
   )
 }
 
 /** Between the screen and the book: within reach of either sideways, and between them vertically. */
-function isBetween(pose: Pose, screen: Pose, book: Pose): boolean {
+function isBetween(pose: Pose, screen: Pose, book: Pose, rules: AttentionRules): boolean {
   const low = Math.min(screen.pitchDeg, book.pitchDeg)
   const high = Math.max(screen.pitchDeg, book.pitchDeg)
   const yawOk =
-    Math.abs(pose.yawDeg - screen.yawDeg) <= ATTENTION.targetYawDeg ||
-    Math.abs(pose.yawDeg - book.yawDeg) <= ATTENTION.targetYawDeg
+    Math.abs(pose.yawDeg - screen.yawDeg) <= rules.targetYawDeg ||
+    Math.abs(pose.yawDeg - book.yawDeg) <= rules.targetYawDeg
   return yawOk && pose.pitchDeg >= low && pose.pitchDeg <= high
 }
 
@@ -127,6 +131,8 @@ export interface ReadContext {
   calibration: Calibration | null
   /** A phone has been confirmed (seen in several object checks in a row) */
   phoneConfirmed: boolean
+  /** Thresholds for the chosen sensitivity; the medium defaults when left out */
+  rules?: AttentionRules
 }
 
 const looking = (reason: Reason, pose: Pose | null): Reading => ({ gaze: 'looking', reason, pose })
@@ -143,6 +149,7 @@ const away = (reason: Reason, pose: Pose | null): Reading => ({ gaze: 'away', re
  * 6. Anything else (e.g. looking up, or at the screen in Book mode): distracted.
  */
 export function readFace(face: Face | null, ctx: ReadContext): Reading {
+  const rules = ctx.rules ?? ATTENTION
   if (!face) return { gaze: 'no-face', reason: 'no-face', pose: null }
   if (ctx.phoneConfirmed) {
     return away('phone', face.matrix ? headPose(face.matrix) : null)
@@ -151,7 +158,7 @@ export function readFace(face: Face | null, ctx: ReadContext): Reading {
   const eyes = eyeScores(face.blendshapes)
   if (!face.matrix) {
     // No head pose this frame: go by the eyes alone
-    return eyes.side > ATTENTION.maxEyeSideScore
+    return eyes.side > rules.maxEyeSideScore
       ? away('eyes-away', null)
       : looking(ctx.mode === 'book' ? 'on-book' : 'on-screen', null)
   }
@@ -162,24 +169,22 @@ export function readFace(face: Face | null, ctx: ReadContext): Reading {
   const targets =
     ctx.mode === 'screen' || !book ? [screen] : ctx.mode === 'book' ? [book] : [screen, book]
 
-  const sideways = targets.every((t) => Math.abs(pose.yawDeg - t.yawDeg) > ATTENTION.sidewaysDeg)
+  const sideways = targets.every((t) => Math.abs(pose.yawDeg - t.yawDeg) > rules.sidewaysDeg)
   if (sideways) return away('sideways', pose)
-  if (eyes.side > ATTENTION.maxEyeSideScore) return away('eyes-away', pose)
+  if (eyes.side > rules.maxEyeSideScore) return away('eyes-away', pose)
 
   if (ctx.mode === 'screen' || !book) {
-    if (!isNear(pose, screen)) return away('off-target', pose)
+    if (!isNear(pose, screen, rules)) return away('off-target', pose)
     // Head at the screen but eyes far down: likely a phone or desk below the screen
-    return eyes.down > ATTENTION.maxEyeDownScore
-      ? away('off-target', pose)
-      : looking('on-screen', pose)
+    return eyes.down > rules.maxEyeDownScore ? away('off-target', pose) : looking('on-screen', pose)
   }
   if (ctx.mode === 'book') {
-    return isNear(pose, book) ? looking('on-book', pose) : away('off-target', pose)
+    return isNear(pose, book, rules) ? looking('on-book', pose) : away('off-target', pose)
   }
   // Mixed
-  if (isNear(pose, screen)) return looking('on-screen', pose)
-  if (isNear(pose, book)) return looking('on-book', pose)
-  if (isBetween(pose, screen, book)) return looking('between', pose)
+  if (isNear(pose, screen, rules)) return looking('on-screen', pose)
+  if (isNear(pose, book, rules)) return looking('on-book', pose)
+  if (isBetween(pose, screen, book, rules)) return looking('between', pose)
   return away('off-target', pose)
 }
 
@@ -203,20 +208,24 @@ export interface PhoneTracker {
 
 export const NO_PHONE: PhoneTracker = { streak: 0, misses: 0, confirmed: false }
 
-export function updatePhone(tracker: PhoneTracker, phoneScore: number): PhoneTracker {
-  if (phoneScore >= ATTENTION.phoneScore) {
+export function updatePhone(
+  tracker: PhoneTracker,
+  phoneScore: number,
+  rules: AttentionRules = ATTENTION,
+): PhoneTracker {
+  if (phoneScore >= rules.phoneScore) {
     const streak = tracker.streak + 1
     return {
       streak,
       misses: 0,
-      confirmed: tracker.confirmed || streak >= ATTENTION.phoneConfirmChecks,
+      confirmed: tracker.confirmed || streak >= rules.phoneConfirmChecks,
     }
   }
   const misses = tracker.misses + 1
   return {
     streak: 0,
     misses,
-    confirmed: tracker.confirmed && misses < ATTENTION.phoneClearChecks,
+    confirmed: tracker.confirmed && misses < rules.phoneClearChecks,
   }
 }
 

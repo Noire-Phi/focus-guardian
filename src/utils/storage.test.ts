@@ -56,7 +56,7 @@ function putRaw(key: string, data: unknown, version = 1) {
   store.set(`focus-guardian:${key}`, JSON.stringify({ version, data }))
 }
 
-const settings: Settings = { focusMinutes: 25, breakMinutes: 5, sound: true }
+const settings: Settings = DEFAULT_SETTINGS
 const focus = timer.start(settings, 0, 'id-1', 'Write tests')
 const finished: Session = timer.stop(focus, 60_000).finished as Session
 
@@ -66,13 +66,20 @@ describe('settings', () => {
   })
 
   it('round-trips saved settings', () => {
-    expect(saveSettings({ focusMinutes: 50, breakMinutes: 10, sound: false })).toBe(true)
-    expect(loadSettings()).toEqual({ focusMinutes: 50, breakMinutes: 10, sound: false })
+    const custom: Settings = {
+      focusMinutes: 50,
+      breakMinutes: 10,
+      sound: false,
+      detections: { lookingAway: true, phone: false, posture: false, tabLeaves: true },
+      sensitivity: 'high',
+    }
+    expect(saveSettings(custom)).toBe(true)
+    expect(loadSettings()).toEqual(custom)
   })
 
   it('keeps valid fields and replaces invalid ones with defaults', () => {
     putRaw('settings', { focusMinutes: 999, breakMinutes: 15, sound: 'yes' })
-    expect(loadSettings()).toEqual({ focusMinutes: 25, breakMinutes: 15, sound: true })
+    expect(loadSettings()).toEqual({ ...DEFAULT_SETTINGS, breakMinutes: 15 })
   })
 
   it('uses the defaults for broken JSON or an unknown version', () => {
@@ -81,6 +88,35 @@ describe('settings', () => {
 
     putRaw('settings', { focusMinutes: 50, breakMinutes: 10, sound: false }, 99)
     expect(loadSettings()).toEqual(DEFAULT_SETTINGS)
+  })
+})
+
+describe('detection and sensitivity settings', () => {
+  it('reads settings saved before these existed: every check on, medium', () => {
+    putRaw('settings', { focusMinutes: 50, breakMinutes: 10, sound: false })
+    expect(loadSettings()).toEqual({
+      focusMinutes: 50,
+      breakMinutes: 10,
+      sound: false,
+      detections: { lookingAway: true, phone: true, posture: true, tabLeaves: true },
+      sensitivity: 'medium',
+    })
+  })
+
+  it('keeps valid switches and turns bad ones back on, one by one', () => {
+    putRaw('settings', {
+      ...DEFAULT_SETTINGS,
+      detections: { lookingAway: false, phone: 'off', posture: false },
+      sensitivity: 'extreme',
+    })
+    const loaded = loadSettings()
+    expect(loaded.detections).toEqual({
+      lookingAway: false,
+      phone: true,
+      posture: false,
+      tabLeaves: true,
+    })
+    expect(loaded.sensitivity).toBe('medium')
   })
 })
 

@@ -11,6 +11,8 @@ const ISSUES: Record<PostureIssue, string> = {
 }
 
 interface Props {
+  /** The posture check's switch in Settings */
+  enabled: boolean
   baseline: PostureMetrics | null
   cameraOn: boolean
   watchAttention: boolean
@@ -62,7 +64,10 @@ export function PosturePanel(props: Props) {
   return (
     <div className="calibration">
       <h3 className="calibration__title">Posture</h3>
-      {cameraOn && baseline && <PostureLine {...props} />}
+      {!props.enabled && (
+        <p className="calibration__summary">The posture check is off in Settings.</p>
+      )}
+      {props.enabled && cameraOn && baseline && <PostureLine {...props} />}
       {step === 'failed' && props.error && (
         <p className="calibration__error" role="alert">
           {props.error}

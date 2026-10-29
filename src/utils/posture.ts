@@ -22,6 +22,9 @@ export const POSTURE = {
   minSamples: 3,
 } as const
 
+/** The same knobs as POSTURE, as plain numbers, so a sensitivity level can change them. */
+export type PostureRules = { [K in keyof typeof POSTURE]: number }
+
 // BlazePose landmark numbers (33 points in total)
 const NOSE = 0
 const LEFT_SHOULDER = 11
@@ -78,14 +81,15 @@ export interface PostureReading {
 export function comparePosture(
   metrics: PostureMetrics | null,
   baseline: PostureMetrics,
+  rules: PostureRules = POSTURE,
 ): PostureReading {
   if (!metrics) return { status: 'unknown', issues: [] }
   const issues: PostureIssue[] = []
-  if (metrics.headHeight < baseline.headHeight * (1 - POSTURE.maxHeadDrop)) issues.push('slouching')
-  if (metrics.shoulderWidth > baseline.shoulderWidth * (1 + POSTURE.maxLeanIn)) {
+  if (metrics.headHeight < baseline.headHeight * (1 - rules.maxHeadDrop)) issues.push('slouching')
+  if (metrics.shoulderWidth > baseline.shoulderWidth * (1 + rules.maxLeanIn)) {
     issues.push('leaning-in')
   }
-  if (Math.abs(metrics.tiltDeg - baseline.tiltDeg) > POSTURE.maxTiltDeg) issues.push('tilted')
+  if (Math.abs(metrics.tiltDeg - baseline.tiltDeg) > rules.maxTiltDeg) issues.push('tilted')
   return { status: issues.length ? 'bad' : 'good', issues }
 }
 
