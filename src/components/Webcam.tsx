@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useAttention } from '../hooks/useAttention'
 import { useCalibration } from '../hooks/useCalibration'
 import { useFaceTracker, type TrackerFrame } from '../hooks/useFaceTracker'
@@ -198,35 +199,39 @@ export function Webcam({ watchAttention, sound, onCameraStats }: Props) {
         onDismiss={calibratePosture.dismiss}
       />
 
-      {/* Fixed at the top of the window, so alerts are seen wherever the page is scrolled */}
-      <div className="alert-stack">
-        {attention.alerting && (
-          <div className="attention-alert" role="alert">
-            {attention.phoneConfirmed ? (
-              <>
-                <strong>Phone detected</strong>
-                <span>Put your phone away to stay focused.</span>
-              </>
-            ) : (
-              <>
-                <strong>Eyes back on your work</strong>
-                <span>You’ve been distracted for {formatDuration(attention.awayMs)}.</span>
-              </>
-            )}
-          </div>
-        )}
-        {posture.alerting && (
-          <div className="attention-alert attention-alert--posture" role="alert">
-            <strong>Check your posture</strong>
-            <span>
-              {posture.reading?.status === 'bad'
-                ? `${posture.reading.issues.includes('slouching') ? 'You’re slouching' : 'Your posture has drifted'}. `
-                : ''}
-              Sit back up like when you calibrated.
-            </span>
-          </div>
-        )}
-      </div>
+      {/* Fixed at the top of the window and rendered at the page root, so alerts are seen
+          wherever the page is scrolled, and on the dashboard too */}
+      {createPortal(
+        <div className="alert-stack">
+          {attention.alerting && (
+            <div className="attention-alert" role="alert">
+              {attention.phoneConfirmed ? (
+                <>
+                  <strong>Phone detected</strong>
+                  <span>Put your phone away to stay focused.</span>
+                </>
+              ) : (
+                <>
+                  <strong>Eyes back on your work</strong>
+                  <span>You’ve been distracted for {formatDuration(attention.awayMs)}.</span>
+                </>
+              )}
+            </div>
+          )}
+          {posture.alerting && (
+            <div className="attention-alert attention-alert--posture" role="alert">
+              <strong>Check your posture</strong>
+              <span>
+                {posture.reading?.status === 'bad'
+                  ? `${posture.reading.issues.includes('slouching') ? 'You’re slouching' : 'Your posture has drifted'}. `
+                  : ''}
+                Sit back up like when you calibrated.
+              </span>
+            </div>
+          )}
+        </div>,
+        document.body,
+      )}
     </section>
   )
 }

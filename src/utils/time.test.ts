@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addDays,
+  startOfWeek,
   formatClock,
   formatDuration,
   formatTimeOfDay,
@@ -61,6 +63,18 @@ describe('days', () => {
 
   it('startOfDay is local midnight', () => {
     expect(startOfDay(noon)).toBe(new Date(2026, 9, 28).getTime())
+  })
+
+  it('startOfWeek is local midnight on Monday', () => {
+    const monday = new Date(2026, 9, 26).getTime()
+    expect(startOfWeek(noon)).toBe(monday) // Wednesday
+    expect(startOfWeek(monday)).toBe(monday)
+    expect(startOfWeek(new Date(2026, 10, 1, 23).getTime())).toBe(monday) // Sunday
+  })
+
+  it('addDays moves by calendar days', () => {
+    expect(addDays(new Date(2026, 9, 29).getTime(), 3)).toBe(new Date(2026, 10, 1).getTime())
+    expect(addDays(new Date(2026, 9, 29).getTime(), -7)).toBe(new Date(2026, 9, 22).getTime())
   })
 
   it('isSameDay splits at local midnight', () => {

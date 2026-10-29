@@ -1,5 +1,6 @@
 export const SECOND = 1000
 export const MINUTE = 60 * SECOND
+export const HOUR = 60 * MINUTE
 
 export function minutesToMs(minutes: number): number {
   return minutes * MINUTE
@@ -51,6 +52,21 @@ export function formatTimeOfDay(timestamp: number): string {
 export function startOfDay(timestamp: number = Date.now()): number {
   const date = new Date(timestamp)
   date.setHours(0, 0, 0, 0)
+  return date.getTime()
+}
+
+/** Midnight (local time) on the Monday of the week containing `timestamp`. */
+export function startOfWeek(timestamp: number = Date.now()): number {
+  const date = new Date(startOfDay(timestamp))
+  const daysSinceMonday = (date.getDay() + 6) % 7 // getDay(): Sunday = 0
+  date.setDate(date.getDate() - daysSinceMonday)
+  return date.getTime()
+}
+
+/** The same local time `days` days later (or earlier), handling daylight saving changes. */
+export function addDays(timestamp: number, days: number): number {
+  const date = new Date(timestamp)
+  date.setDate(date.getDate() + days)
   return date.getTime()
 }
 

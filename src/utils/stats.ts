@@ -15,6 +15,14 @@ export interface DaySummary {
 }
 
 /**
+ * Study time for one session: its length capped at its planned length. Paused time isn't
+ * recorded separately, so a long pause can make this read a little high.
+ */
+export function sessionStudyMs(s: Session): number {
+  return Math.max(0, Math.min(s.endedAt - s.startedAt, minutesToMs(s.plannedMinutes)))
+}
+
+/**
  * Totals for the day containing `now`, worked out from saved history (never stored).
  * Focus time is each session's length capped at its planned length. Paused time isn't
  * recorded separately, so a session paused for a while can count a bit more than you
@@ -29,10 +37,7 @@ export function summarizeDay(sessions: Session[], now: number): DaySummary {
   return {
     started: today.length,
     completed: today.filter((s) => s.completed).length,
-    focusMs: today.reduce(
-      (sum, s) => sum + Math.min(s.endedAt - s.startedAt, minutesToMs(s.plannedMinutes)),
-      0,
-    ),
+    focusMs: today.reduce((sum, s) => sum + sessionStudyMs(s), 0),
     distractions: today.reduce((sum, s) => sum + s.distractions.length, 0),
     tabLeaves: today.reduce((sum, s) => sum + s.tabLeaves, 0),
     focusScore: averageScore(today),
