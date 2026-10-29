@@ -3,6 +3,10 @@ import type { Session, Settings } from '../types'
 import {
   DEFAULT_ATTENTION_PREFS,
   DEFAULT_SETTINGS,
+  MAX_BACKUPS,
+  STORAGE_VERSION,
+  listBackups,
+  upgrade,
   loadAttentionPrefs,
   saveAttentionPrefs,
   isValidMinutes,
@@ -31,8 +35,18 @@ beforeEach(() => {
       if (blocked) throw new Error('blocked')
       store.set(key, value)
     },
+    removeItem: (key: string) => {
+      if (blocked) throw new Error('blocked')
+      store.delete(key)
+    },
+    key: (i: number) => [...store.keys()][i] ?? null,
+    get length() {
+      return store.size
+    },
   })
 })
+
+const backupKeys = () => [...store.keys()].filter((k) => k.startsWith('focus-guardian:backup:'))
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -205,5 +219,148 @@ describe('blocked storage', () => {
     expect(loadSessions()).toEqual([])
     expect(loadTimerState()).toBeUndefined()
     expect(saveSessions([finished])).toBe(false)
+  })
+})
+
+describe('saving each session', () => {
+  it('saves in the versioned { version, data } format', () => {
+    saveSessions([finished])
+    expect(JSON.parse(store.get('focus-guardian:sessions')!)).toEqual({
+      version: STORAGE_VERSION,
+      data: [finished],
+    })
+  })
+
+  it('keeps every session as history grows, one save per finished session', () => {
+    const second = { ...finished, id: 'id-2', intention: 'Second' }
+    saveSessions([finished])
+    saveSessions([...loadSessions(), second])
+    expect(loadSessions()).toEqual([finished, second])
+  })
+})
+
+describe('missing or corrupted data', () => {
+  it('missing data reads as empty, without a backup', () => {
+    expect(loadSessions()).toEqual([])
+    expect(backupKeys()).toEqual([])
+  })
+
+  it('broken JSON reads as empty and is backed up before anything overwrites it', () => {
+    store.set('focus-guardian:sessions', '{"version":1,"data":[{"id":')
+    expect(loadSessions()).toEqual([])
+
+    // The app then saves over it (e.g. the next finished session)...
+    saveSessions([finished])
+    // ...but the broken value is still there to recover
+    expect(listBackups()).toEqual([
+      expect.objectContaining({
+        key: 'focus-guardian:sessions',
+        reason: 'not valid JSON',
+        raw: '{"version":1,"data":[{"id":',
+      }),
+    ])
+  })
+
+  it('data not in the { version, data } format is backed up', () => {
+    store.set('focus-guardian:sessions', JSON.stringify([finished])) // no wrapper
+    expect(loadSessions()).toEqual([])
+    expect(listBackups()[0].reason).toMatch(/format/)
+  })
+
+  it('sessions that are not a list are backed up', () => {
+    putRaw('sessions', { not: 'a list' })
+    expect(loadSessions()).toEqual([])
+    expect(listBackups()[0].reason).toMatch(/not a list/)
+  })
+
+  it('keeps the good sessions when some are broken, and backs up the whole value', () => {
+    putRaw('sessions', [finished, { ...finished, id: 7 }, 'junk'])
+    expect(loadSessions()).toEqual([finished])
+    const [backup] = listBackups()
+    expect(backup.reason).toBe('2 session(s) failed the checks')
+    expect(JSON.parse(backup.raw).data).toHaveLength(3)
+  })
+
+  it('does not back up data that loads cleanly', () => {
+    saveSessions([finished])
+    loadSessions()
+    expect(backupKeys()).toEqual([])
+  })
+
+  it('keeps only the newest few backups', () => {
+    vi.useFakeTimers()
+    for (let i = 0; i < MAX_BACKUPS + 2; i++) {
+      vi.setSystemTime(1_000_000 + i * 1000)
+      store.set('focus-guardian:sessions', `broken ${i}`)
+      loadSessions()
+    }
+    vi.useRealTimers()
+    expect(backupKeys()).toHaveLength(MAX_BACKUPS)
+    expect(listBackups().map((b) => b.raw)).toEqual(['broken 4', 'broken 3', 'broken 2'])
+  })
+
+  it('never throws when storage is blocked, even while backing up', () => {
+    store.set('focus-guardian:sessions', 'broken')
+    blocked = true
+    expect(() => loadSessions()).not.toThrow()
+    expect(listBackups()).toEqual([])
+  })
+
+  it('other saved values get the same protection', () => {
+    store.set('focus-guardian:settings', '{oops')
+    expect(loadSettings()).toEqual(DEFAULT_SETTINGS)
+    expect(listBackups()[0].key).toBe('focus-guardian:settings')
+  })
+})
+
+describe('versions', () => {
+  it('data from a newer version of the app is backed up, not used or lost', () => {
+    putRaw('sessions', [finished], STORAGE_VERSION + 1)
+    expect(loadSessions()).toEqual([])
+    expect(listBackups()[0].reason).toBe(`can't read version ${STORAGE_VERSION + 1}`)
+  })
+
+  it('a version that is not a positive whole number is backed up', () => {
+    for (const version of [0, -1, 1.5, '1', null]) {
+      store.clear()
+      store.set('focus-guardian:sessions', JSON.stringify({ version, data: [finished] }))
+      expect(loadSessions()).toEqual([])
+      expect(backupKeys()).toHaveLength(1)
+    }
+  })
+
+  describe('upgrade', () => {
+    // Pretend the format is at version 3, with steps from 1 to 2 and 2 to 3
+    const migrations = {
+      1: (data: unknown) => ({ items: data }), // v1 was a bare list
+      2: (data: unknown) => ({ ...(data as object), upgraded: true }),
+    }
+
+    it('runs each step from the saved version up to the current one', () => {
+      expect(upgrade(1, ['a'], 'k', migrations, 3)).toEqual({ items: ['a'], upgraded: true })
+      expect(upgrade(2, { items: [] }, 'k', migrations, 3)).toEqual({ items: [], upgraded: true })
+    })
+
+    it('leaves current data alone', () => {
+      const data = { items: [] }
+      expect(upgrade(3, data, 'k', migrations, 3)).toBe(data)
+    })
+
+    it('gives up if a step is missing, fails, or the version is newer', () => {
+      expect(upgrade(1, [], 'k', { 2: migrations[2] }, 3)).toBeUndefined()
+      const failing = {
+        ...migrations,
+        2: () => {
+          throw new Error('bad data')
+        },
+      }
+      expect(upgrade(1, [], 'k', failing, 3)).toBeUndefined()
+      expect(upgrade(4, [], 'k', migrations, 3)).toBeUndefined()
+    })
+
+    it('with the real (empty) migration list, only the current version is readable', () => {
+      expect(upgrade(STORAGE_VERSION, [1], 'k')).toEqual([1])
+      expect(upgrade(STORAGE_VERSION - 1, [1], 'k')).toBeUndefined()
+    })
   })
 })
