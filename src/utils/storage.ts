@@ -2,6 +2,8 @@ import type {
   CameraStats,
   Distraction,
   Session,
+  Detections,
+  Sensitivity,
   SessionDraft,
   Settings,
   TimerState,
@@ -26,7 +28,11 @@ export const DEFAULT_SETTINGS: Settings = {
   focusMinutes: 25,
   breakMinutes: 5,
   sound: true,
+  detections: { lookingAway: true, phone: true, posture: true, tabLeaves: true },
+  sensitivity: 'medium',
 }
+
+const SENSITIVITIES: readonly Sensitivity[] = ['low', 'medium', 'high']
 
 /** Allowed whole-minute ranges, shared by loading and the settings form. */
 export const MINUTE_LIMITS = {
@@ -274,6 +280,24 @@ export function loadSettings(): Settings {
       ? data.breakMinutes
       : DEFAULT_SETTINGS.breakMinutes,
     sound: typeof data.sound === 'boolean' ? data.sound : DEFAULT_SETTINGS.sound,
+    // Missing in settings saved before these existed: every check on, medium sensitivity
+    detections: loadDetections(data.detections),
+    sensitivity: SENSITIVITIES.includes(data.sensitivity as Sensitivity)
+      ? (data.sensitivity as Sensitivity)
+      : DEFAULT_SETTINGS.sensitivity,
+  }
+}
+
+/** Each detection switch on its own: a bad or missing one falls back to on. */
+function loadDetections(value: unknown): Detections {
+  const saved = isRecord(value) ? value : {}
+  const pick = (name: keyof Detections) =>
+    typeof saved[name] === 'boolean' ? (saved[name] as boolean) : DEFAULT_SETTINGS.detections[name]
+  return {
+    lookingAway: pick('lookingAway'),
+    phone: pick('phone'),
+    posture: pick('posture'),
+    tabLeaves: pick('tabLeaves'),
   }
 }
 

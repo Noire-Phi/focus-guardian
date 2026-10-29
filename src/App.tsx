@@ -97,7 +97,7 @@ function App() {
         <SettingsPanel settings={settings} onChange={setSettings} />
         <Webcam
           watchAttention={timer.phase === 'focus' && !timer.isPaused}
-          sound={settings.sound}
+          settings={settings}
           onCameraStats={timer.recordCamera}
         />
       </div>

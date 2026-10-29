@@ -35,7 +35,20 @@ export interface Settings {
   focusMinutes: number
   breakMinutes: number
   sound: boolean
+  /** Which checks run during a focus session */
+  detections: Detections
+  /** How readily the checks flag a distraction (see utils/sensitivity.ts) */
+  sensitivity: Sensitivity
 }
+
+export interface Detections {
+  lookingAway: boolean // camera: looking away from your screen or book
+  phone: boolean // camera: a phone in view
+  posture: boolean // camera: slouching or leaning (needs posture calibration)
+  tabLeaves: boolean // leaving this browser tab
+}
+
+export type Sensitivity = 'low' | 'medium' | 'high'
 
 // A focus session still in progress: everything except how it ended.
 // awaySince is when you left the tab, while you're away; otherwise null.

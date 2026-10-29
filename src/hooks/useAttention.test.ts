@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { Calibration, ObjectScores, StudyMode } from '../utils/attention'
+import { ATTENTION, type Calibration, type ObjectScores, type StudyMode } from '../utils/attention'
 import { poseMatrix } from '../utils/poseMatrix.testutil'
 import { useAttention } from './useAttention'
 import type { TrackerFrame } from './useFaceTracker'
@@ -193,6 +193,60 @@ describe('useAttention', () => {
     // Confirmed on the 3rd check (400 ms); 400, 600 and 800 count as phone time
     const phoneMs = onMeasure.mock.calls.reduce((sum, [d]) => sum + d.phoneMs, 0)
     expect(phoneMs).toBe(600)
+  })
+
+  describe('settings switches', () => {
+    const run = (checkGaze: boolean, checkPhone: boolean) => {
+      const onAlert = vi.fn()
+      const onMeasure = vi.fn()
+      const { result } = renderHook(() =>
+        useAttention({
+          watching: true,
+          mode: 'screen',
+          calibration,
+          onAlert,
+          onMeasure,
+          checkGaze,
+          checkPhone,
+        }),
+      )
+      return { result, onAlert, onMeasure }
+    }
+
+    it('with looking away off, turning sideways is not flagged, but a phone still is', () => {
+      const { result, onAlert, onMeasure } = run(false, true)
+      for (let at = 0; at <= 8000; at += 200) act(() => result.current.handleFrame(SIDEWAYS(at)))
+      expect(result.current.reading?.reason).toBe('unchecked')
+      expect(onAlert).not.toHaveBeenCalled()
+
+      for (let at = 8200; at <= 8600; at += 200) {
+        act(() => result.current.handleFrame(frame(at, 50, -5, { phone: 0.9, book: 0 })))
+      }
+      expect(result.current.reading?.reason).toBe('phone')
+      expect(onAlert).toHaveBeenCalledTimes(1)
+      // No "on task" information, so nothing is recorded for the focus score
+      expect(onMeasure).not.toHaveBeenCalled()
+    })
+
+    it('with the phone check off, phone detections are ignored', () => {
+      const { result, onAlert } = run(true, false)
+      for (let at = 0; at <= 1000; at += 200) {
+        act(() => result.current.handleFrame(frame(at, 0, -5, { phone: 0.9, book: 0 })))
+      }
+      expect(result.current.reading?.reason).toBe('on-screen')
+      expect(result.current.phoneConfirmed).toBe(false)
+      expect(onAlert).not.toHaveBeenCalled()
+    })
+
+    it('uses the sensitivity rules it is given', () => {
+      const onAlert = vi.fn()
+      const rules = { ...ATTENTION, alertAfterMs: 3000 }
+      const { result } = renderHook(() =>
+        useAttention({ watching: true, mode: 'screen', calibration, onAlert, rules }),
+      )
+      for (let at = 0; at <= 3000; at += 200) act(() => result.current.handleFrame(SIDEWAYS(at)))
+      expect(onAlert).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('treats no face as distracted', () => {

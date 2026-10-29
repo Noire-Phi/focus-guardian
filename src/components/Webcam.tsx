@@ -7,9 +7,10 @@ import { useLocalStorage } from '../hooks/useLocalStorage'
 import { usePosture } from '../hooks/usePosture'
 import { usePostureCalibration } from '../hooks/usePostureCalibration'
 import { useWebcam } from '../hooks/useWebcam'
-import type { CameraStats } from '../types'
+import type { CameraStats, Settings } from '../types'
 import { needsBookCalibration } from '../utils/attention'
 import { EMPTY_CAMERA_STATS, addCameraStats } from '../utils/focusScore'
+import { tuningFor } from '../utils/sensitivity'
 import { playChime } from '../utils/sound'
 import { loadAttentionPrefs, saveAttentionPrefs } from '../utils/storage'
 import { formatDuration } from '../utils/time'
@@ -21,7 +22,8 @@ import { StudyModePicker } from './StudyModePicker'
 interface Props {
   /** Run the focus check (only while a focus session is running) */
   watchAttention: boolean
-  sound: boolean
+  /** Alert sound, which checks are on, and how sensitive they are */
+  settings: Pick<Settings, 'sound' | 'detections' | 'sensitivity'>
   /** Receives camera time for the focus score, about once a second */
   onCameraStats?: (delta: CameraStats) => void
 }
@@ -29,7 +31,11 @@ interface Props {
 // How often collected camera time is passed on to the session
 const FLUSH_EVERY_MS = 1000
 
-export function Webcam({ watchAttention, sound, onCameraStats }: Props) {
+export function Webcam({ watchAttention, settings, onCameraStats }: Props) {
+  const { sound, detections } = settings
+  const tuning = tuningFor(settings.sensitivity)
+  const checkGaze = detections.lookingAway
+  const checkPhone = detections.phone
   const camera = useWebcam()
   const videoRef = useRef<HTMLVideoElement>(null)
   const [prefs, setPrefs] = useLocalStorage(loadAttentionPrefs, saveAttentionPrefs)
@@ -39,10 +45,13 @@ export function Webcam({ watchAttention, sound, onCameraStats }: Props) {
   const calibrate = useCalibration((next) => setPrefs({ ...prefs, calibration: next }))
   const calibratePosture = usePostureCalibration((posture) => setPrefs({ ...prefs, posture }))
   const calibrating = calibrate.recording || calibratePosture.recording
-  const needsBook = needsBookCalibration(studyMode, calibration)
-  const watching = watchAttention && cameraOn && !calibrating && !needsBook
-  // Posture is checked during a focus session once you've calibrated it, in any mode
-  const watchingPosture = watchAttention && cameraOn && !calibrating && prefs.posture !== null
+  // Book and Mixed need the book position, but only for the looking-away check
+  const needsBook = checkGaze && needsBookCalibration(studyMode, calibration)
+  const watching =
+    watchAttention && cameraOn && !calibrating && (checkGaze || checkPhone) && !needsBook
+  // Posture is checked during a focus session once it's on and calibrated, in any mode
+  const watchingPosture =
+    watchAttention && cameraOn && !calibrating && detections.posture && prefs.posture !== null
 
   // Camera time is collected here and passed on in batches, so the session (which is
   // saved on every change) isn't updated five times a second
@@ -60,6 +69,9 @@ export function Webcam({ watchAttention, sound, onCameraStats }: Props) {
     watching,
     mode: studyMode,
     calibration,
+    rules: tuning.attention,
+    checkGaze,
+    checkPhone,
     onMeasure: collect,
     onAlert: () => {
       if (sound) playChime()
@@ -69,6 +81,7 @@ export function Webcam({ watchAttention, sound, onCameraStats }: Props) {
   const posture = usePosture({
     watching: watchingPosture,
     baseline: prefs.posture,
+    rules: tuning.posture,
     onMeasure: collect,
     onAlert: () => {
       if (sound) playChime()
@@ -77,8 +90,8 @@ export function Webcam({ watchAttention, sound, onCameraStats }: Props) {
 
   const tracker = useFaceTracker(videoRef, {
     active: cameraOn && (watching || watchingPosture || calibrating),
-    // Phones are looked for in every mode while the focus check runs (not while calibrating)
-    detectObjects: watching,
+    // Phones are looked for in every mode while the check runs (not while calibrating)
+    detectObjects: watching && checkPhone,
     detectPose: watchingPosture || calibratePosture.recording,
     onFrame: (frame: TrackerFrame) => {
       attention.handleFrame(frame)
@@ -131,7 +144,10 @@ export function Webcam({ watchAttention, sound, onCameraStats }: Props) {
         )}
       </div>
 
-      {cameraOn && !calibrating && (
+      {cameraOn && !calibrating && !checkGaze && !checkPhone && (
+        <p className="attention-line">Looking-away and phone checks are off in Settings.</p>
+      )}
+      {cameraOn && !calibrating && (checkGaze || checkPhone) && (
         <AttentionStatus
           watchAttention={watchAttention}
           needsBook={needsBook}
@@ -184,6 +200,7 @@ export function Webcam({ watchAttention, sound, onCameraStats }: Props) {
       />
 
       <PosturePanel
+        enabled={detections.posture}
         baseline={prefs.posture}
         cameraOn={cameraOn}
         watchAttention={watchAttention}

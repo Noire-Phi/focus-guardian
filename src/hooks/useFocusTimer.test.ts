@@ -2,11 +2,12 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Session, Settings } from '../types'
+import { DEFAULT_SETTINGS } from '../utils/storage'
 import { useFocusTimer } from './useFocusTimer'
 
 const MIN = 60_000
 const START = new Date(2026, 9, 29, 9, 0).getTime()
-const settings: Settings = { focusMinutes: 25, breakMinutes: 5, sound: false }
+const settings: Settings = { ...DEFAULT_SETTINGS, sound: false }
 
 function setup(initial: Settings = settings) {
   const onSessionEnd = vi.fn<(session: Session) => void>()
@@ -181,6 +182,20 @@ describe('useFocusTimer', () => {
     expect(second.result.current.phase).toBe('focus')
     expect(second.result.current.session?.intention).toBe('Survives reload')
     expect(second.result.current.remainingMs).toBe(18 * MIN)
+  })
+
+  it('does not count leaving the tab when that check is off in Settings', () => {
+    const { result } = setup({
+      ...settings,
+      detections: { ...settings.detections, tabLeaves: false },
+    })
+    act(() => result.current.start('x'))
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(result.current.session?.tabLeaves).toBe(0)
+    vi.restoreAllMocks()
   })
 
   it('counts leaving the tab during focus', () => {

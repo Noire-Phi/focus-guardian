@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import type { Settings } from '../types'
-import { isValidMinutes, MINUTE_LIMITS } from '../utils/storage'
+import type { Detections, Sensitivity, Settings } from '../types'
+import { SENSITIVITY_HINTS } from '../utils/sensitivity'
+import { DEFAULT_SETTINGS, isValidMinutes, MINUTE_LIMITS } from '../utils/storage'
 
 type MinutesField = keyof typeof MINUTE_LIMITS
 
@@ -9,32 +10,111 @@ interface Props {
   onChange: (settings: Settings) => void
 }
 
+const DETECTIONS: { key: keyof Detections; label: string; hint: string }[] = [
+  { key: 'lookingAway', label: 'Looking away', hint: 'Camera: away from your screen or book' },
+  { key: 'phone', label: 'Phone', hint: 'Camera: a phone in view' },
+  { key: 'posture', label: 'Posture', hint: 'Camera: slouching or leaning (calibrate first)' },
+  { key: 'tabLeaves', label: 'Leaving the tab', hint: 'Switching to another tab or app' },
+]
+
+const SENSITIVITIES: { value: Sensitivity; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+]
+
 export function SettingsPanel({ settings, onChange }: Props) {
+  // Bumped on reset so the minute boxes, which keep their own text, start over
+  const [resetCount, setResetCount] = useState(0)
+  const setDetection = (key: keyof Detections, on: boolean) =>
+    onChange({ ...settings, detections: { ...settings.detections, [key]: on } })
+
   return (
     <details className="settings">
       <summary className="section-title">Settings</summary>
-      <div className="settings__body">
-        <MinutesInput
-          label="Focus length"
-          field="focusMinutes"
-          value={settings.focusMinutes}
-          onChange={(focusMinutes) => onChange({ ...settings, focusMinutes })}
-        />
-        <MinutesInput
-          label="Break length"
-          field="breakMinutes"
-          value={settings.breakMinutes}
-          onChange={(breakMinutes) => onChange({ ...settings, breakMinutes })}
-        />
-        <label className="settings__row">
-          <span>Sound when a phase ends</span>
-          <input
-            type="checkbox"
-            checked={settings.sound}
-            onChange={(e) => onChange({ ...settings, sound: e.target.checked })}
+      <div className="settings__body" key={resetCount}>
+        <fieldset className="settings__group">
+          <legend>Timer</legend>
+          <MinutesInput
+            label="Focus length"
+            field="focusMinutes"
+            value={settings.focusMinutes}
+            onChange={(focusMinutes) => onChange({ ...settings, focusMinutes })}
           />
-        </label>
-        <p className="settings__note">Changes apply from the next focus session or break.</p>
+          <MinutesInput
+            label="Break length"
+            field="breakMinutes"
+            value={settings.breakMinutes}
+            onChange={(breakMinutes) => onChange({ ...settings, breakMinutes })}
+          />
+          <p className="settings__note">Changes apply from the next focus session or break.</p>
+        </fieldset>
+
+        <fieldset className="settings__group">
+          <legend>Alerts</legend>
+          <label className="settings__row">
+            <span>
+              Alert sound
+              <small className="settings__hint">When a phase ends, and with each alert</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={settings.sound}
+              onChange={(e) => onChange({ ...settings, sound: e.target.checked })}
+            />
+          </label>
+        </fieldset>
+
+        <fieldset className="settings__group">
+          <legend>Detections</legend>
+          {DETECTIONS.map((d) => (
+            <label key={d.key} className="settings__row">
+              <span>
+                {d.label}
+                <small className="settings__hint">{d.hint}</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.detections[d.key]}
+                onChange={(e) => setDetection(d.key, e.target.checked)}
+              />
+            </label>
+          ))}
+          <p className="settings__note">
+            Camera checks run during a focus session while the camera is on. The focus score needs
+            the looking-away check.
+          </p>
+        </fieldset>
+
+        <fieldset className="settings__group">
+          <legend>Sensitivity</legend>
+          <div className="settings__segmented" role="radiogroup" aria-label="Sensitivity">
+            {SENSITIVITIES.map((s) => (
+              <label key={s.value}>
+                <input
+                  type="radio"
+                  name="sensitivity"
+                  value={s.value}
+                  checked={settings.sensitivity === s.value}
+                  onChange={() => onChange({ ...settings, sensitivity: s.value })}
+                />
+                <span>{s.label}</span>
+              </label>
+            ))}
+          </div>
+          <p className="settings__note">{SENSITIVITY_HINTS[settings.sensitivity]}</p>
+        </fieldset>
+
+        <button
+          type="button"
+          className="link-button settings__reset"
+          onClick={() => {
+            onChange(DEFAULT_SETTINGS)
+            setResetCount((n) => n + 1)
+          }}
+        >
+          Reset to defaults
+        </button>
       </div>
     </details>
   )

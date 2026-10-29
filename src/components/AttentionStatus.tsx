@@ -28,6 +28,8 @@ function describe(reason: Reason, mode: StudyMode, bookSeen: boolean): string {
       return 'Eyes looking away'
     case 'phone':
       return 'Phone in view'
+    case 'unchecked':
+      return 'Watching for phones'
     case 'no-face':
       return 'No face in view'
     case 'off-target':

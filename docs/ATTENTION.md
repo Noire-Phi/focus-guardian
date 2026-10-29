@@ -207,6 +207,36 @@ of good posture to clear it. It's separate from the focus alert; both can show a
 - **Posture is judged from the front.** A webcam sees head height, shoulder width and
   tilt well, but not how curved your back is. Big slouches show up; small ones may not.
 
+## Settings: switches and sensitivity
+
+In **Settings** you can turn each check on or off and choose a sensitivity. Both are
+saved with the other settings.
+
+| Switch          | When off                                                                    |
+| --------------- | --------------------------------------------------------------------------- |
+| Looking away    | Head pose and eye gaze aren't judged. No focus score (it needs this check). |
+| Phone           | The object detector doesn't run (or download).                              |
+| Posture         | Pose Landmarker doesn't run (or download).                                  |
+| Leaving the tab | Tab leaves and time away aren't counted.                                    |
+
+With looking away off but phone on, the camera only watches for phones.
+
+**Sensitivity** swaps in a set of thresholds (`utils/sensitivity.ts`). Medium is the
+defaults described above.
+
+| Setting                      | Low  | Medium | High |
+| ---------------------------- | ---- | ------ | ---- |
+| Sideways turn                | 40°  | 30°    | 22°  |
+| Within a target              | 25°  | 20°    | 15°  |
+| Alert after distracted for   | 10 s | 5 s    | 3 s  |
+| Phone: detector confidence   | 65%  | 50%    | 40%  |
+| Phone: checks in a row       | 4    | 3      | 2    |
+| Posture: head drop / lean in | 30%  | 20%    | 12%  |
+| Posture: shoulder tilt       | 15°  | 10°    | 6°   |
+| Posture: alert after         | 40 s | 20 s   | 10 s |
+
+How often frames are checked doesn't change with sensitivity.
+
 ## Tuning knobs
 
 Posture settings are in `POSTURE` (`utils/posture.ts`): `maxHeadDrop` 0.2,

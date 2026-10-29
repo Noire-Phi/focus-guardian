@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Settings, TimerState } from '../types'
+import { DEFAULT_SETTINGS } from './storage'
 import * as timer from './timer'
 
 const MIN = 60_000
-const settings: Settings = { focusMinutes: 25, breakMinutes: 5, sound: true }
+const settings: Settings = DEFAULT_SETTINGS
 
 // A focus session started at time 0, so it ends at 25 minutes
 const focus = timer.start(settings, 0, 'id-1', 'Write tests')

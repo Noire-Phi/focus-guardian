@@ -159,7 +159,7 @@ describe('needsBookCalibration', () => {
 })
 
 describe('updatePhone (confirming a phone)', () => {
-  const feed = (scores: number[]) => scores.reduce(updatePhone, NO_PHONE)
+  const feed = (scores: number[]) => scores.reduce((t, score) => updatePhone(t, score), NO_PHONE)
 
   it('needs 3 confident checks in a row', () => {
     expect(feed([0.8, 0.9]).confirmed).toBe(false)
