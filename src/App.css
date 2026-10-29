@@ -16,6 +16,133 @@
   color: var(--text-strong);
 }
 
+/* Timer / Dashboard switch */
+
+.view-switch {
+  display: flex;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.view-switch button {
+  min-width: 110px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.view-switch button[aria-pressed='true'] {
+  color: #fff;
+  background: var(--focus);
+}
+
+.view-switch button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.app__view {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.app__view[hidden] {
+  display: none;
+}
+
+/* Dashboard */
+
+.dashboard {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+}
+
+.dashboard__totals {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.chart-card {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.chart-card__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.chart-card__note {
+  margin-bottom: 12px;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.chart-card__canvas {
+  position: relative;
+  height: 220px;
+}
+
+.chart-card__canvas--short {
+  height: 180px;
+}
+
+.chart-card__empty {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.dashboard-empty {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 20px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 16px;
+}
+
+.dashboard-empty__art svg {
+  fill: var(--focus-soft);
+  stroke: var(--focus);
+  stroke-width: 2;
+}
+
+.dashboard-empty__title {
+  margin: 0;
+  font-size: 1.125rem;
+  color: var(--text-strong);
+}
+
+.dashboard-empty__text {
+  max-width: 340px;
+  color: var(--muted);
+}
+
 /* Timer */
 
 .timer {
