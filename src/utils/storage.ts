@@ -9,8 +9,9 @@ import type {
 import type { Calibration, Pose, StudyMode } from './attention'
 import type { PostureMetrics } from './posture'
 
-// The only module that touches localStorage (see docs/PLAN.md).
-// Saved values are wrapped as { version, data } so later type changes can migrate old data.
+// The only module that touches localStorage (see docs/PLAN.md and docs/STORAGE.md).
+// Saved values are wrapped as { version, data }: older versions are upgraded by MIGRATIONS,
+// and anything unreadable is backed up before the app saves over it.
 
 export const STORAGE_VERSION = 1
 
@@ -118,19 +119,135 @@ function isTimerState(value: unknown): value is TimerState {
   return sessionOk && timesOk
 }
 
-/** Returns the stored data, or undefined if missing, unreadable or from an unknown version. */
-function read(key: string): unknown {
-  try {
-    const raw = localStorage.getItem(key)
-    if (raw === null) return undefined
+/**
+ * Upgrades from each older format to the next: `MIGRATIONS[n]` turns version n data into
+ * version n + 1. When the saved format changes, bump STORAGE_VERSION and add a step here,
+ * so data saved by older versions of the app is upgraded instead of lost.
+ */
+export type Migration = (data: unknown, key: string) => unknown
+const MIGRATIONS: Record<number, Migration> = {}
 
-    const parsed: unknown = JSON.parse(raw)
-    if (!isRecord(parsed) || parsed.version !== STORAGE_VERSION) return undefined
-    return parsed.data
-  } catch {
-    // localStorage can be blocked (private mode, browser settings) or hold invalid JSON
+/**
+ * Brings data saved as `version` up to `target`, one step at a time. Undefined if a step
+ * is missing or fails, or the data is from a newer version than this app knows.
+ */
+export function upgrade(
+  version: unknown,
+  data: unknown,
+  key: string,
+  migrations: Record<number, Migration> = MIGRATIONS,
+  target: number = STORAGE_VERSION,
+): unknown {
+  if (!Number.isInteger(version) || (version as number) < 1 || (version as number) > target) {
     return undefined
   }
+  let current = data
+  for (let v = version as number; v < target; v++) {
+    const step = migrations[v]
+    if (!step) return undefined
+    try {
+      current = step(current, key)
+    } catch {
+      return undefined
+    }
+  }
+  return current
+}
+
+// Unreadable data is copied here before the app saves over it, so it can be recovered
+const BACKUP_PREFIX = 'focus-guardian:backup:'
+export const MAX_BACKUPS = 3
+
+/**
+ * Keeps a copy of a saved value the app couldn't use (broken JSON, an unknown format, a
+ * newer version, entries that didn't pass the checks). Only the newest few are kept, so
+ * repeated problems can't fill up storage.
+ */
+function backUp(key: string, raw: string, reason: string): void {
+  try {
+    localStorage.setItem(
+      `${BACKUP_PREFIX}${Date.now()}:${key}`,
+      JSON.stringify({ key, reason, savedAt: Date.now(), raw }),
+    )
+    const backups: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k?.startsWith(BACKUP_PREFIX)) backups.push(k)
+    }
+    // Keys start with the time, so sorting by the number after the prefix is oldest first
+    backups.sort((a, b) => backupTime(a) - backupTime(b))
+    for (const old of backups.slice(0, Math.max(0, backups.length - MAX_BACKUPS))) {
+      localStorage.removeItem(old)
+    }
+  } catch {
+    // Storage full or blocked: nothing more we can do
+  }
+}
+
+function backupTime(backupKey: string): number {
+  return Number(backupKey.slice(BACKUP_PREFIX.length).split(':')[0]) || 0
+}
+
+/** The backups kept so far, newest first (for support or a future "recover" screen). */
+export function listBackups(): { key: string; reason: string; savedAt: number; raw: string }[] {
+  const found = []
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (!k?.startsWith(BACKUP_PREFIX)) continue
+      const value: unknown = JSON.parse(localStorage.getItem(k) ?? 'null')
+      if (isRecord(value) && typeof value.raw === 'string') {
+        found.push({
+          key: String(value.key),
+          reason: String(value.reason),
+          savedAt: Number(value.savedAt),
+          raw: value.raw,
+        })
+      }
+    }
+  } catch {
+    return []
+  }
+  return found.sort((a, b) => b.savedAt - a.savedAt)
+}
+
+interface ReadResult {
+  data: unknown // undefined when missing or unusable
+  raw: string | null // what was stored, for backing up
+}
+
+/**
+ * Reads a saved value. Missing data is simply undefined. Data that can't be used (broken
+ * JSON, not in the { version, data } format, from a newer app, or failing an upgrade) is
+ * backed up first, then reads as undefined, so the app starts fresh without losing it.
+ */
+function read(key: string): ReadResult {
+  let raw: string | null
+  try {
+    raw = localStorage.getItem(key)
+  } catch {
+    // Storage blocked (private mode, browser settings): nothing to read or back up
+    return { data: undefined, raw: null }
+  }
+  if (raw === null) return { data: undefined, raw: null }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    backUp(key, raw, 'not valid JSON')
+    return { data: undefined, raw }
+  }
+  if (!isRecord(parsed) || !('version' in parsed) || !('data' in parsed)) {
+    backUp(key, raw, 'not in the { version, data } format')
+    return { data: undefined, raw }
+  }
+  const data = upgrade(parsed.version, parsed.data, key)
+  if (data === undefined) {
+    backUp(key, raw, `can't read version ${String(parsed.version)}`)
+    return { data: undefined, raw }
+  }
+  return { data, raw }
 }
 
 function write(key: string, data: unknown): boolean {
@@ -146,7 +263,7 @@ function write(key: string, data: unknown): boolean {
 
 /** Saved settings, with defaults filled in for anything missing or invalid. */
 export function loadSettings(): Settings {
-  const data = read(KEYS.settings)
+  const { data } = read(KEYS.settings)
   if (!isRecord(data)) return { ...DEFAULT_SETTINGS }
 
   return {
@@ -164,11 +281,22 @@ export function saveSettings(settings: Settings): boolean {
   return write(KEYS.settings, settings)
 }
 
-/** Saved session history. Entries that don't match the Session shape are dropped. */
+/**
+ * Saved session history. Entries that don't match the Session shape are dropped, but the
+ * whole saved value is backed up first, so dropped sessions can still be recovered.
+ */
 export function loadSessions(): Session[] {
-  const data = read(KEYS.sessions)
-  if (!Array.isArray(data)) return []
-  return data.filter(isSession)
+  const { data, raw } = read(KEYS.sessions)
+  if (data === undefined) return []
+  if (!Array.isArray(data)) {
+    if (raw !== null) backUp(KEYS.sessions, raw, 'sessions are not a list')
+    return []
+  }
+  const sessions = data.filter(isSession)
+  if (sessions.length < data.length && raw !== null) {
+    backUp(KEYS.sessions, raw, `${data.length - sessions.length} session(s) failed the checks`)
+  }
+  return sessions
 }
 
 export function saveSessions(sessions: Session[]): boolean {
@@ -177,7 +305,7 @@ export function saveSessions(sessions: Session[]): boolean {
 
 /** The running timer, so a reload or reopened tab picks up where it left off. */
 export function loadTimerState(): TimerState | undefined {
-  const data = read(KEYS.timer)
+  const { data } = read(KEYS.timer)
   return isTimerState(data) ? data : undefined
 }
 
@@ -226,7 +354,7 @@ function isCalibration(value: unknown): value is Calibration {
 }
 
 export function loadAttentionPrefs(): AttentionPrefs {
-  const data = read(KEYS.attention)
+  const { data } = read(KEYS.attention)
   if (!isRecord(data)) return { ...DEFAULT_ATTENTION_PREFS }
   return {
     studyMode: STUDY_MODES.includes(data.studyMode as StudyMode)
