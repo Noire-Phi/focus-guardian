@@ -12,17 +12,23 @@ export const ATTENTION = {
   // Eyes alone looking far to the side, or (in Screen mode) far down
   maxEyeSideScore: 0.65,
   maxEyeDownScore: 0.8,
-  // Object detector (Book mode): how sure it must be, and how long a sighting counts
+  // Phone (all modes): how sure the object detector must be, how many checks in a row
+  // confirm it, and how many checks in a row without it clear it again
   phoneScore: 0.5,
+  phoneConfirmChecks: 3,
+  phoneClearChecks: 2,
+  // Book (shown in Book mode): how sure, and how long a sighting counts
   bookScore: 0.4,
   objectHoldMs: 2000,
   // Being distracted must last this long before an alert…
   alertAfterMs: 5000,
   // …and you must be back on task for this long to clear it, so a flicker doesn't reset it
   recoverAfterMs: 1000,
-  // How often to check a frame for your face, and (Book mode) for objects
+  // How often to check a frame for your face, and for objects. Object checks ride on the
+  // first face check at least 500 ms after the last one, so in practice every 600 ms, and
+  // 3 checks in a row take about 1.2 s.
   checkEveryMs: 200,
-  objectCheckEveryMs: 1000,
+  objectCheckEveryMs: 500,
 } as const
 
 export type StudyMode = 'screen' | 'book' | 'mixed'
@@ -119,7 +125,8 @@ export function needsBookCalibration(mode: StudyMode, calibration: Calibration |
 export interface ReadContext {
   mode: StudyMode
   calibration: Calibration | null
-  phoneSeen: boolean
+  /** A phone has been confirmed (seen in several object checks in a row) */
+  phoneConfirmed: boolean
 }
 
 const looking = (reason: Reason, pose: Pose | null): Reading => ({ gaze: 'looking', reason, pose })
@@ -128,7 +135,7 @@ const away = (reason: Reason, pose: Pose | null): Reading => ({ gaze: 'away', re
 /**
  * One frame: focused or distracted, and why. Rules, in order:
  * 1. No face: distracted (you left, or turned fully away).
- * 2. Book mode and a phone was seen recently: distracted, whatever your head does.
+ * 2. A confirmed phone: distracted, whatever your head does (any mode).
  * 3. Head turned sideways, away from every target: distracted.
  * 4. Eyes looking far to the side: distracted.
  * 5. Head pointing at a target for this mode (screen, book, or in Mixed either one or
@@ -137,7 +144,7 @@ const away = (reason: Reason, pose: Pose | null): Reading => ({ gaze: 'away', re
  */
 export function readFace(face: Face | null, ctx: ReadContext): Reading {
   if (!face) return { gaze: 'no-face', reason: 'no-face', pose: null }
-  if (ctx.mode === 'book' && ctx.phoneSeen) {
+  if (ctx.phoneConfirmed) {
     return away('phone', face.matrix ? headPose(face.matrix) : null)
   }
 
@@ -182,19 +189,40 @@ export interface ObjectScores {
   phone: number
 }
 
-/** When a phone and a book were last seen, so one missed detection doesn't drop them. */
-export interface Sightings {
-  phoneAt: number | null
-  bookAt: number | null
+/**
+ * Phone confirmation. One detection could be a mistake (a dark book cover, a remote), so a
+ * phone only counts once it's been seen with enough confidence in several object checks
+ * in a row. Once confirmed, it takes a couple of checks in a row without it to clear, so
+ * a single missed detection doesn't make the alert flicker.
+ */
+export interface PhoneTracker {
+  streak: number // object checks in a row with a phone
+  misses: number // object checks in a row without one
+  confirmed: boolean
 }
 
-export const NO_SIGHTINGS: Sightings = { phoneAt: null, bookAt: null }
+export const NO_PHONE: PhoneTracker = { streak: 0, misses: 0, confirmed: false }
 
-export function updateSightings(s: Sightings, objects: ObjectScores, now: number): Sightings {
-  return {
-    phoneAt: objects.phone >= ATTENTION.phoneScore ? now : s.phoneAt,
-    bookAt: objects.book >= ATTENTION.bookScore ? now : s.bookAt,
+export function updatePhone(tracker: PhoneTracker, phoneScore: number): PhoneTracker {
+  if (phoneScore >= ATTENTION.phoneScore) {
+    const streak = tracker.streak + 1
+    return {
+      streak,
+      misses: 0,
+      confirmed: tracker.confirmed || streak >= ATTENTION.phoneConfirmChecks,
+    }
   }
+  const misses = tracker.misses + 1
+  return {
+    streak: 0,
+    misses,
+    confirmed: tracker.confirmed && misses < ATTENTION.phoneClearChecks,
+  }
+}
+
+/** When a book was last seen, so one missed detection doesn't drop it. */
+export function updateBookSeenAt(bookAt: number | null, objects: ObjectScores, now: number) {
+  return objects.book >= ATTENTION.bookScore ? now : bookAt
 }
 
 export function seenRecently(at: number | null, now: number): boolean {
@@ -222,7 +250,9 @@ export function updateAttention(
 ): AttentionState {
   if (gaze !== 'looking') {
     const awaySince = state.awaySince ?? now
-    return { awaySince, backSince: null, alerting: now - awaySince >= rules.alertAfterMs }
+    // Once alerting, stay alerting for the rest of the stretch (one alert per stretch)
+    const alerting = state.alerting || now - awaySince >= rules.alertAfterMs
+    return { awaySince, backSince: null, alerting }
   }
 
   if (state.awaySince === null) return state

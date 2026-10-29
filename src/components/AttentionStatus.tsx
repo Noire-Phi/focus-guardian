@@ -61,9 +61,9 @@ export function AttentionStatus(props: Props) {
   const text = describe(reading.reason, mode, bookSeen)
   const objectNote =
     objectStatus === 'loading'
-      ? ' (loading book/phone detection…)'
+      ? ' (loading phone detection…)'
       : objectStatus === 'error'
-        ? ' (book/phone detection unavailable)'
+        ? ' (phone detection unavailable)'
         : ''
 
   return reading.gaze === 'looking' ? (

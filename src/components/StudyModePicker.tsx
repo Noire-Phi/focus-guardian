@@ -5,7 +5,7 @@ const MODES: { value: StudyMode; label: string; hint: string }[] = [
   {
     value: 'book',
     label: 'Book / Paper',
-    hint: 'Focused when looking down at your book; phones are flagged',
+    hint: 'Focused when looking down at your book or paper',
   },
   {
     value: 'mixed',

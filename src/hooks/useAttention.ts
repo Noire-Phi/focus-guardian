@@ -1,24 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ATTENTIVE,
-  NO_SIGHTINGS,
+  NO_PHONE,
   awayForMs,
   readFace,
   seenRecently,
   updateAttention,
-  updateSightings,
+  updateBookSeenAt,
+  updatePhone,
   type AttentionState,
   type Calibration,
+  type PhoneTracker,
   type Reading,
-  type Sightings,
   type StudyMode,
 } from '../utils/attention'
 import type { TrackerFrame } from './useFaceTracker'
 
 /**
  * Judges camera frames (from useFaceTracker) while `watching`: focused or distracted for
- * the study mode, and the 5 second rule. Calls `onAlert` once each time being distracted
- * passes 5 seconds. Rules are in utils/attention.ts.
+ * the study mode, and the 5 second rule. Calls `onAlert` once per stretch of distraction:
+ * after 5 seconds, or straight away when a phone is confirmed. Rules are in
+ * utils/attention.ts.
  */
 export function useAttention({
   watching,
@@ -35,16 +37,20 @@ export function useAttention({
   const [attention, setAttention] = useState<AttentionState>(ATTENTIVE)
   const [checkedAt, setCheckedAt] = useState(0)
   const [bookSeen, setBookSeen] = useState(false)
+  const [phoneConfirmed, setPhoneConfirmed] = useState(false)
 
   const attentionRef = useRef<AttentionState>(ATTENTIVE)
-  const sightingsRef = useRef<Sightings>(NO_SIGHTINGS)
+  const phoneRef = useRef<PhoneTracker>(NO_PHONE)
+  const bookAtRef = useRef<number | null>(null)
 
   function reset() {
     attentionRef.current = ATTENTIVE
-    sightingsRef.current = NO_SIGHTINGS
+    phoneRef.current = NO_PHONE
+    bookAtRef.current = null
     setAttention(ATTENTIVE)
     setReading(null)
     setBookSeen(false)
+    setPhoneConfirmed(false)
   }
 
   function handleFrame(frame: TrackerFrame) {
@@ -54,24 +60,27 @@ export function useAttention({
       reset()
       return
     }
+    // Object results arrive on some frames only (every 500 ms); the counts move then
     if (frame.objects) {
-      sightingsRef.current = updateSightings(sightingsRef.current, frame.objects, frame.at)
+      phoneRef.current = updatePhone(phoneRef.current, frame.objects.phone)
+      bookAtRef.current = updateBookSeenAt(bookAtRef.current, frame.objects, frame.at)
     }
-    const sightings = sightingsRef.current
-    const next = readFace(frame.face, {
-      mode,
-      calibration,
-      phoneSeen: seenRecently(sightings.phoneAt, frame.at),
-    })
+    const phone = phoneRef.current
+    const next = readFace(frame.face, { mode, calibration, phoneConfirmed: phone.confirmed })
+
     const previous = attentionRef.current
-    const updated = updateAttention(previous, next.gaze, frame.at)
+    const stepped = updateAttention(previous, next.gaze, frame.at)
+    // A confirmed phone alerts right away: seeing it several checks in a row is already
+    // the guard against false alarms, so it doesn't also wait for the 5 seconds
+    const updated = phone.confirmed ? { ...stepped, alerting: true } : stepped
     attentionRef.current = updated
 
     if (updated.alerting && !previous.alerting) onAlert()
     setReading(next)
     setAttention(updated)
     setCheckedAt(frame.at)
-    setBookSeen(seenRecently(sightings.bookAt, frame.at))
+    setPhoneConfirmed(phone.confirmed)
+    setBookSeen(mode === 'book' && seenRecently(bookAtRef.current, frame.at))
   }
 
   // Start over whenever watching stops or the rules change (mode, calibration)
@@ -84,6 +93,7 @@ export function useAttention({
     handleFrame,
     reading: watching ? reading : null,
     bookSeen: watching && bookSeen,
+    phoneConfirmed: watching && phoneConfirmed,
     awayMs: watching ? awayForMs(attention, checkedAt) : 0,
     alerting: watching && attention.alerting,
   }

@@ -2,7 +2,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { poseMatrix } from '../utils/poseMatrix.testutil'
-import { useFaceTracker, type TrackerFrame } from './useFaceTracker'
+import { resetModelsForTests, useFaceTracker, type TrackerFrame } from './useFaceTracker'
 
 // A fake MediaPipe: tests choose what each detector returns
 const mp = vi.hoisted(() => ({
@@ -68,6 +68,7 @@ async function setup({ active = true, detectObjects = false } = {}) {
 
 beforeEach(() => {
   vi.useFakeTimers()
+  resetModelsForTests()
   mp.face = FACE
   mp.objects = PHONE_AND_BOOK
   mp.detectFace.mockReset().mockImplementation(() => mp.face)
@@ -82,7 +83,6 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-// Loaded models are shared across hook instances, so the loading cases run first
 describe('loading', () => {
   it('shows an error if face detection cannot load, and can retry', async () => {
     mp.createFace.mockRejectedValue(new Error('offline'))
@@ -105,6 +105,26 @@ describe('loading', () => {
     await wait(400)
     expect(frames).toHaveLength(2)
     expect(frames.every((f) => f.objects === null)).toBe(true)
+  })
+
+  it('waits for the object detector before checking, so its slow start happens while loading', async () => {
+    let finishLoading: () => void = () => {}
+    mp.createObjects.mockReset().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishLoading = () => resolve({ detectForVideo: mp.detectObjects })
+        }),
+    )
+    const { result, frames } = await setup({ detectObjects: true })
+    await wait(1000)
+    expect(result.current.status).toBe('loading')
+    expect(frames).toHaveLength(0)
+
+    finishLoading()
+    await wait(0)
+    expect(result.current.status).toBe('ready')
+    await wait(400)
+    expect(frames).toHaveLength(2)
   })
 
   it('tries the CPU when the GPU is not available', async () => {
@@ -149,7 +169,7 @@ describe('useFaceTracker', () => {
     expect(frames).toHaveLength(1)
   })
 
-  it('looks for objects only when asked, and then once a second', async () => {
+  it('looks for objects only when asked, and then at most every 500 ms', async () => {
     const off = await setup()
     await wait(1000)
     expect(mp.detectObjects).not.toHaveBeenCalled()
@@ -159,7 +179,8 @@ describe('useFaceTracker', () => {
     const on = await setup({ detectObjects: true })
     await wait(2000)
     expect(mp.detectFace).toHaveBeenCalledTimes(10)
-    expect(mp.detectObjects).toHaveBeenCalledTimes(2)
+    // On the face checks at 200, 800, 1400 and 2000 ms
+    expect(mp.detectObjects).toHaveBeenCalledTimes(4)
     expect(on.frames.find((f) => f.objects)?.objects).toEqual({ phone: 0.8, book: 0.6 })
   })
 

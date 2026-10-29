@@ -73,14 +73,65 @@ describe('useAttention', () => {
     expect(onAlert).not.toHaveBeenCalled()
   })
 
-  it('in Book mode, a phone sighting makes it distracted for the next 2 seconds', () => {
-    const { result, feed } = setup('book')
-    act(() => result.current.handleFrame(frame(0, 0, -40, { phone: 0.9, book: 0 })))
-    expect(result.current.reading?.reason).toBe('phone')
-    feed(AT_BOOK, 200, 1800)
-    expect(result.current.reading?.reason).toBe('phone')
-    feed(AT_BOOK, 2200, 0)
-    expect(result.current.reading?.reason).toBe('on-book')
+  describe('phones', () => {
+    // Each of these frames carries an object check, like every 500 ms in the app
+    const phone = (score: number) => (at: number) => frame(at, 0, -40, { phone: score, book: 0 })
+
+    it('alerts as soon as a phone is seen in 3 checks in a row, not before', () => {
+      const { result, feed, onAlert } = setup('book')
+      feed(phone(0.9), 0, 400) // frames at 0, 200 and 400: the third confirms it
+      expect(result.current.reading?.reason).toBe('phone')
+      expect(result.current.phoneConfirmed).toBe(true)
+      expect(result.current.alerting).toBe(true)
+      expect(onAlert).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not alert on 2 checks, or when the streak is broken', () => {
+      const { result, feed, onAlert } = setup('book')
+      feed(phone(0.9), 0, 200)
+      expect(result.current.reading?.reason).toBe('on-book')
+      feed(phone(0.1), 400, 0)
+      feed(phone(0.9), 600, 200)
+      expect(result.current.phoneConfirmed).toBe(false)
+      expect(onAlert).not.toHaveBeenCalled()
+    })
+
+    it('ignores detections below the confidence threshold', () => {
+      const { result, feed, onAlert } = setup('book')
+      feed(phone(0.4), 0, 2000)
+      expect(result.current.reading?.reason).toBe('on-book')
+      expect(onAlert).not.toHaveBeenCalled()
+    })
+
+    it('works in Screen mode too', () => {
+      const { result, feed, onAlert } = setup('screen')
+      feed((at) => frame(at, 0, -5, { phone: 0.8, book: 0 }), 0, 400)
+      expect(result.current.reading?.reason).toBe('phone')
+      expect(onAlert).toHaveBeenCalledTimes(1)
+    })
+
+    it('clears once the phone is gone and you are back on task, then can alert again', () => {
+      const { result, feed, onAlert } = setup('book')
+      feed(phone(0.9), 0, 400)
+      expect(onAlert).toHaveBeenCalledTimes(1)
+
+      feed(phone(0), 600, 200) // 2 checks without the phone
+      expect(result.current.phoneConfirmed).toBe(false)
+      expect(result.current.reading?.reason).toBe('on-book')
+      expect(result.current.alerting).toBe(true) // still confirming you're back
+      feed(phone(0), 1000, 1000)
+      expect(result.current.alerting).toBe(false)
+
+      feed(phone(0.9), 2200, 400)
+      expect(onAlert).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not chime again when the 5 seconds pass after a phone alert', () => {
+      const { feed, onAlert } = setup('book')
+      feed(phone(0.9), 0, 400)
+      feed(SIDEWAYS, 600, 8000)
+      expect(onAlert).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('reports when a book is in view', () => {
