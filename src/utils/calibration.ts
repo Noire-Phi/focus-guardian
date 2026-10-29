@@ -14,21 +14,22 @@ export const CALIBRATION = {
   minGapDeg: 10,
 } as const
 
-export type CalibrationTarget = 'screen' | 'book'
+export type CalibrationTarget = 'screen' | 'book' | 'posture'
 
-export interface CalibrationRun {
+/** One recording: head angles for screen/book, posture measurements for posture. */
+export interface CalibrationRun<T = Pose> {
   target: CalibrationTarget
   startedAt: number
-  samples: Pose[]
+  samples: T[]
 }
 
-export function startRun(target: CalibrationTarget, now: number): CalibrationRun {
+export function startRun<T = Pose>(target: CalibrationTarget, now: number): CalibrationRun<T> {
   return { target, startedAt: now, samples: [] }
 }
 
 export type RunPhase = 'settle' | 'recording' | 'complete'
 
-export function runPhase(run: CalibrationRun, now: number): RunPhase {
+export function runPhase<T>(run: CalibrationRun<T>, now: number): RunPhase {
   const elapsed = now - run.startedAt
   if (elapsed < CALIBRATION.settleMs) return 'settle'
   if (elapsed < CALIBRATION.settleMs + CALIBRATION.sampleMs) return 'recording'
@@ -36,15 +37,19 @@ export function runPhase(run: CalibrationRun, now: number): RunPhase {
 }
 
 /** 0 to 1 across the recording part (0 while settling). */
-export function runProgress(run: CalibrationRun, now: number): number {
+export function runProgress<T>(run: CalibrationRun<T>, now: number): number {
   const recorded = now - run.startedAt - CALIBRATION.settleMs
   return Math.min(1, Math.max(0, recorded / CALIBRATION.sampleMs))
 }
 
-/** Adds a frame's head pose while recording. Frames without a face are skipped. */
-export function addSample(run: CalibrationRun, pose: Pose | null, now: number): CalibrationRun {
-  if (!pose || runPhase(run, now) !== 'recording') return run
-  return { ...run, samples: [...run.samples, pose] }
+/** Adds a frame's sample while recording. Frames with nothing to measure (null) are skipped. */
+export function addSample<T>(
+  run: CalibrationRun<T>,
+  sample: T | null,
+  now: number,
+): CalibrationRun<T> {
+  if (!sample || runPhase(run, now) !== 'recording') return run
+  return { ...run, samples: [...run.samples, sample] }
 }
 
 export function median(values: number[]): number {

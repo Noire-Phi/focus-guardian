@@ -19,6 +19,7 @@ function setup() {
           hidden: false,
           face: yaw === null ? null : { matrix: poseMatrix(yaw, pitch), blendshapes: {} },
           objects: null,
+          pose: null,
         }),
       )
     }
@@ -54,6 +55,7 @@ describe('useCalibration', () => {
           hidden: false,
           face: { matrix: poseMatrix(0, 0), blendshapes: {} },
           objects: null,
+          pose: null,
         }),
       )
     frameAt(0)

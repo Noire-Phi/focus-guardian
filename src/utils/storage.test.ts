@@ -151,6 +151,7 @@ describe('attention prefs', () => {
     const prefs = {
       studyMode: 'mixed' as const,
       calibration: { screen: { yawDeg: 1, pitchDeg: -5 }, book: { yawDeg: 0, pitchDeg: -40 } },
+      posture: { headHeight: 0.9, shoulderWidth: 0.35, tiltDeg: 1 },
     }
     saveAttentionPrefs(prefs)
     expect(loadAttentionPrefs()).toEqual(prefs)
@@ -160,9 +161,24 @@ describe('attention prefs', () => {
     const prefs = {
       studyMode: 'screen' as const,
       calibration: { screen: { yawDeg: 1, pitchDeg: -5 }, book: null },
+      posture: null,
     }
     saveAttentionPrefs(prefs)
     expect(loadAttentionPrefs()).toEqual(prefs)
+  })
+
+  it('reads prefs saved before posture checks existed', () => {
+    putRaw('attention', { studyMode: 'book', calibration: null })
+    expect(loadAttentionPrefs()).toEqual({ studyMode: 'book', calibration: null, posture: null })
+  })
+
+  it('drops a broken posture baseline', () => {
+    putRaw('attention', {
+      studyMode: 'screen',
+      calibration: null,
+      posture: { headHeight: 1, shoulderWidth: 0, tiltDeg: 0 },
+    })
+    expect(loadAttentionPrefs().posture).toBeNull()
   })
 
   it('drops an unknown mode or a broken calibration', () => {

@@ -21,6 +21,7 @@ const frame = (
   hidden: false,
   face: yaw === null ? null : { matrix: poseMatrix(yaw, pitch), blendshapes: {} },
   objects,
+  pose: null,
 })
 const AT_SCREEN = (at: number) => frame(at, 0, -5)
 const AT_BOOK = (at: number) => frame(at, 0, -40)
@@ -143,7 +144,9 @@ describe('useAttention', () => {
   it('starts fresh after a hidden tab', () => {
     const { result, feed, onAlert } = setup()
     feed(SIDEWAYS, 0, 4000)
-    act(() => result.current.handleFrame({ at: 4200, hidden: true, face: null, objects: null }))
+    act(() =>
+      result.current.handleFrame({ at: 4200, hidden: true, face: null, objects: null, pose: null }),
+    )
     expect(result.current.awayMs).toBe(0)
     feed(SIDEWAYS, 4400, 4000)
     expect(onAlert).not.toHaveBeenCalled()

@@ -1,5 +1,6 @@
 import type { Distraction, Session, SessionDraft, Settings, TimerState } from '../types'
 import type { Calibration, Pose, StudyMode } from './attention'
+import type { PostureMetrics } from './posture'
 
 // The only module that touches localStorage (see docs/PLAN.md).
 // Saved values are wrapped as { version, data } so later type changes can migrate old data.
@@ -167,9 +168,25 @@ export function saveTimerState(state: TimerState): boolean {
 export interface AttentionPrefs {
   studyMode: StudyMode
   calibration: Calibration | null
+  /** Your calibrated good posture */
+  posture: PostureMetrics | null
 }
 
-export const DEFAULT_ATTENTION_PREFS: AttentionPrefs = { studyMode: 'screen', calibration: null }
+export const DEFAULT_ATTENTION_PREFS: AttentionPrefs = {
+  studyMode: 'screen',
+  calibration: null,
+  posture: null,
+}
+
+function isPostureMetrics(value: unknown): value is PostureMetrics {
+  return (
+    isRecord(value) &&
+    [value.headHeight, value.shoulderWidth, value.tiltDeg].every(
+      (n) => typeof n === 'number' && Number.isFinite(n),
+    ) &&
+    (value.shoulderWidth as number) > 0
+  )
+}
 
 const STUDY_MODES: readonly StudyMode[] = ['screen', 'book', 'mixed']
 
@@ -195,6 +212,8 @@ export function loadAttentionPrefs(): AttentionPrefs {
       ? (data.studyMode as StudyMode)
       : DEFAULT_ATTENTION_PREFS.studyMode,
     calibration: isCalibration(data.calibration) ? data.calibration : null,
+    // Missing in prefs saved before posture checks existed: that's just "not calibrated"
+    posture: isPostureMetrics(data.posture) ? data.posture : null,
   }
 }
 

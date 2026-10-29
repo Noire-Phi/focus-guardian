@@ -3,9 +3,11 @@ import type {
   FaceLandmarkerResult,
   ObjectDetector,
   ObjectDetectorResult,
+  PoseLandmarker,
 } from '@mediapipe/tasks-vision'
 import { useEffect, useEffectEvent, useRef, useState, type RefObject } from 'react'
 import { ATTENTION, type Blendshapes, type Face, type ObjectScores } from '../utils/attention'
+import { POSTURE, type Landmark } from '../utils/posture'
 
 // MediaPipe's runtime and models are fetched the first time they're needed, not with the
 // app. Only these files are downloaded; video frames never leave your device.
@@ -14,6 +16,8 @@ const FACE_MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
 const OBJECT_MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite'
+const POSE_MODEL_URL =
+  'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'
 
 // COCO category names in the object detector's model
 const BOOK = 'book'
@@ -24,12 +28,14 @@ type Vision = typeof import('@mediapipe/tasks-vision')
 let visionPromise: Promise<{ vision: Vision; fileset: unknown }> | null = null
 let facePromise: Promise<FaceLandmarker> | null = null
 let objectsPromise: Promise<ObjectDetector> | null = null
+let posePromise: Promise<PoseLandmarker> | null = null
 
 /** Forgets the loaded models. Only for tests, so each test can load from scratch. */
 export function resetModelsForTests() {
   visionPromise = null
   facePromise = null
   objectsPromise = null
+  posePromise = null
 }
 
 function loadVision() {
@@ -61,11 +67,31 @@ async function createTask<
   return task
 }
 
-function loadFaceLandmarker(): Promise<FaceLandmarker> {
-  facePromise ??= loadVision()
-    .then(({ vision, fileset }) =>
+/** Loads a model once and shares it; a failed load is forgotten so a retry can try again. */
+function cached<T>(
+  get: () => Promise<T> | null,
+  set: (p: Promise<T> | null) => void,
+  load: (vision: Vision, fileset: never) => Promise<T>,
+): Promise<T> {
+  const existing = get()
+  if (existing) return existing
+  const promise = loadVision()
+    .then(({ vision, fileset }) => load(vision, fileset as never))
+    .catch((err: unknown) => {
+      set(null)
+      throw err
+    })
+  set(promise)
+  return promise
+}
+
+const loadFaceLandmarker = () =>
+  cached(
+    () => facePromise,
+    (p) => (facePromise = p),
+    (vision, fileset) =>
       createTask((delegate) =>
-        vision.FaceLandmarker.createFromOptions(fileset as never, {
+        vision.FaceLandmarker.createFromOptions(fileset, {
           baseOptions: { modelAssetPath: FACE_MODEL_URL, delegate },
           runningMode: 'VIDEO',
           numFaces: 1,
@@ -73,19 +99,15 @@ function loadFaceLandmarker(): Promise<FaceLandmarker> {
           outputFacialTransformationMatrixes: true,
         }),
       ),
-    )
-    .catch((err: unknown) => {
-      facePromise = null // let a retry try again
-      throw err
-    })
-  return facePromise
-}
+  )
 
-function loadObjectDetector(): Promise<ObjectDetector> {
-  objectsPromise ??= loadVision()
-    .then(({ vision, fileset }) =>
+const loadObjectDetector = () =>
+  cached(
+    () => objectsPromise,
+    (p) => (objectsPromise = p),
+    (vision, fileset) =>
       createTask((delegate) =>
-        vision.ObjectDetector.createFromOptions(fileset as never, {
+        vision.ObjectDetector.createFromOptions(fileset, {
           baseOptions: { modelAssetPath: OBJECT_MODEL_URL, delegate },
           runningMode: 'VIDEO',
           // Only the two things we care about, so other objects never show up
@@ -94,13 +116,22 @@ function loadObjectDetector(): Promise<ObjectDetector> {
           maxResults: 5,
         }),
       ),
-    )
-    .catch((err: unknown) => {
-      objectsPromise = null
-      throw err
-    })
-  return objectsPromise
-}
+  )
+
+const loadPoseLandmarker = () =>
+  cached(
+    () => posePromise,
+    (p) => (posePromise = p),
+    (vision, fileset) =>
+      createTask((delegate) =>
+        vision.PoseLandmarker.createFromOptions(fileset, {
+          // The "lite" model: plenty for head and shoulders, and the fastest
+          baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate },
+          runningMode: 'VIDEO',
+          numPoses: 1,
+        }),
+      ),
+  )
 
 function toFace(result: FaceLandmarkerResult): Face | null {
   if (result.faceLandmarks.length === 0) return null
@@ -122,71 +153,85 @@ function toObjectScores(result: ObjectDetectorResult): ObjectScores {
   return scores
 }
 
-/** One check of the camera. `objects` is null on checks where objects weren't looked for. */
+/**
+ * One check of the camera. `objects` and `pose` are null on checks where they weren't
+ * looked for; `pose.landmarks` is null when they were but no person was found.
+ */
 export interface TrackerFrame {
   at: number
   hidden: boolean
   face: Face | null
   objects: ObjectScores | null
+  pose: { landmarks: Landmark[] | null } | null
 }
 
 export type TrackerStatus = 'off' | 'loading' | 'ready' | 'error'
 
+/** Loads a model when `active` and `wanted`, and reports its status. */
+function useOptionalModel<T>(active: boolean, wanted: boolean, load: () => Promise<T>) {
+  const [model, setModel] = useState<T | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    if (!active || !wanted || model || failed) return
+    let cancelled = false
+    load().then(
+      (loaded) => !cancelled && setModel(() => loaded),
+      () => !cancelled && setFailed(true),
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [active, wanted, model, failed, load])
+
+  const status: TrackerStatus =
+    !active || !wanted ? 'off' : failed ? 'error' : model ? 'ready' : 'loading'
+  return {
+    model: wanted ? model : null,
+    status,
+    // Loaded, failed, or not needed: either way, nothing to wait for
+    settled: !wanted || model !== null || failed,
+    retry: () => setFailed(false),
+  }
+}
+
 /**
- * Runs MediaPipe on the video while `active`: Face Landmarker every 200 ms and, when
- * `detectObjects` is on, the object detector every second. Each result goes to `onFrame`.
- * The judging (focused or not, calibration) happens in the hooks that receive the frames.
+ * Runs MediaPipe on the video while `active`: Face Landmarker every 200 ms; when
+ * `detectObjects` is on, the object detector at most every 500 ms; when `detectPose` is
+ * on, Pose Landmarker at most every 500 ms. Each result goes to `onFrame`. The judging
+ * (focused or not, posture, calibration) happens in the hooks that receive the frames.
  */
 export function useFaceTracker(
   videoRef: RefObject<HTMLVideoElement | null>,
   {
     active,
     detectObjects,
+    detectPose = false,
     onFrame,
   }: {
     active: boolean
     detectObjects: boolean
+    detectPose?: boolean
     onFrame: (frame: TrackerFrame) => void
   },
 ) {
-  const [faceModel, setFaceModel] = useState<FaceLandmarker | null>(null)
-  const [objectModel, setObjectModel] = useState<ObjectDetector | null>(null)
-  const [faceFailed, setFaceFailed] = useState(false)
-  const [objectsFailed, setObjectsFailed] = useState(false)
+  const face = useOptionalModel(active, true, loadFaceLandmarker)
+  const objects = useOptionalModel(active, detectObjects, loadObjectDetector)
+  const pose = useOptionalModel(active, detectPose, loadPoseLandmarker)
+
+  // The loop reads the optional models through refs, so turning one on or off doesn't
+  // restart it
   const objectModelRef = useRef<ObjectDetector | null>(null)
-
+  const poseModelRef = useRef<PoseLandmarker | null>(null)
   useEffect(() => {
-    if (!active || faceModel || faceFailed) return
-    let cancelled = false
-    loadFaceLandmarker().then(
-      (model) => !cancelled && setFaceModel(model),
-      () => !cancelled && setFaceFailed(true),
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [active, faceModel, faceFailed])
-
-  useEffect(() => {
-    if (!active || !detectObjects || objectModel || objectsFailed) return
-    let cancelled = false
-    loadObjectDetector().then(
-      (model) => !cancelled && setObjectModel(model),
-      () => !cancelled && setObjectsFailed(true),
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [active, detectObjects, objectModel, objectsFailed])
-
-  useEffect(() => {
-    objectModelRef.current = detectObjects ? objectModel : null
-  }, [detectObjects, objectModel])
+    objectModelRef.current = objects.model
+    poseModelRef.current = pose.model
+  }, [objects.model, pose.model])
 
   const check = useEffectEvent(
-    (model: FaceLandmarker, last: { frameTime: number; objectsAt: number }) => {
+    (model: FaceLandmarker, last: { frameTime: number; objectsAt: number; poseAt: number }) => {
       if (document.hidden) {
-        onFrame({ at: Date.now(), hidden: true, face: null, objects: null })
+        onFrame({ at: Date.now(), hidden: true, face: null, objects: null, pose: null })
         return
       }
       const video = videoRef.current
@@ -194,28 +239,44 @@ export function useFaceTracker(
       if (!video || video.readyState < 2 || video.currentTime === last.frameTime) return
       last.frameTime = video.currentTime
 
-      const face = toFace(model.detectForVideo(video, performance.now()))
-      let objects: ObjectScores | null = null
+      const faceResult = toFace(model.detectForVideo(video, performance.now()))
+
+      let objectScores: ObjectScores | null = null
       const detector = objectModelRef.current
       if (detector && Date.now() - last.objectsAt >= ATTENTION.objectCheckEveryMs) {
-        objects = toObjectScores(detector.detectForVideo(video, performance.now()))
+        objectScores = toObjectScores(detector.detectForVideo(video, performance.now()))
         last.objectsAt = Date.now()
       }
+
+      let poseResult: TrackerFrame['pose'] = null
+      const poser = poseModelRef.current
+      if (poser && Date.now() - last.poseAt >= POSTURE.checkEveryMs) {
+        const result = poser.detectForVideo(video, performance.now())
+        poseResult = { landmarks: result.landmarks[0] ?? null }
+        last.poseAt = Date.now()
+      }
+
       // Timed after detecting, so a slow frame can't make being away seem longer
-      onFrame({ at: Date.now(), hidden: false, face, objects })
+      onFrame({
+        at: Date.now(),
+        hidden: false,
+        face: faceResult,
+        objects: objectScores,
+        pose: poseResult,
+      })
     },
   )
 
-  // When objects are wanted, wait for the object detector too (or for it to fail). Its
-  // slow first run then happens while "Loading" shows, not after checking has started.
-  const objectsSettled = !detectObjects || objectModel !== null || objectsFailed
-  const ready = faceModel !== null && objectsSettled
+  // Wait for every model that's wanted (or for it to fail), so their slow first runs
+  // happen while "Loading" shows, not after checking has started
+  const ready = face.model !== null && objects.settled && pose.settled
+  const faceModel = face.model
 
   // Check a frame every 200 ms. Each check is scheduled after the previous one finishes,
   // so slow frames can never pile up.
   useEffect(() => {
     if (!active || !ready || !faceModel) return
-    const last = { frameTime: -1, objectsAt: -Infinity }
+    const last = { frameTime: -1, objectsAt: -Infinity, poseAt: -Infinity }
     let timer: ReturnType<typeof setTimeout>
     const loop = () => {
       check(faceModel, last)
@@ -225,16 +286,22 @@ export function useFaceTracker(
     return () => clearTimeout(timer)
   }, [active, ready, faceModel])
 
-  const status: TrackerStatus = !active ? 'off' : faceFailed ? 'error' : ready ? 'ready' : 'loading'
-  const objectStatus: TrackerStatus =
-    !active || !detectObjects ? 'off' : objectsFailed ? 'error' : objectModel ? 'ready' : 'loading'
+  const status: TrackerStatus = !active
+    ? 'off'
+    : face.status === 'error'
+      ? 'error'
+      : ready
+        ? 'ready'
+        : 'loading'
 
   return {
     status,
-    objectStatus,
+    objectStatus: objects.status,
+    poseStatus: pose.status,
     retry: () => {
-      setFaceFailed(false)
-      setObjectsFailed(false)
+      face.retry()
+      objects.retry()
+      pose.retry()
     },
   }
 }
