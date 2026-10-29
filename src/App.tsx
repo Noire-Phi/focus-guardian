@@ -62,7 +62,11 @@ function App() {
       )}
       <TodaySummary summary={summarizeDay(sessions, timer.now)} />
       <SettingsPanel settings={settings} onChange={setSettings} />
-      <Webcam watchAttention={timer.phase === 'focus' && !timer.isPaused} sound={settings.sound} />
+      <Webcam
+        watchAttention={timer.phase === 'focus' && !timer.isPaused}
+        sound={settings.sound}
+        onCameraStats={timer.recordCamera}
+      />
     </main>
   )
 }

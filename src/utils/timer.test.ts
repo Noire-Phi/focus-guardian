@@ -200,6 +200,27 @@ describe('tab guard', () => {
   })
 })
 
+describe('addCameraTime', () => {
+  it('adds camera time to the session in progress, and it is kept when it finishes', () => {
+    let state = timer.addCameraTime(focus, { checkedMs: 200, focusedMs: 200 })
+    state = timer.addCameraTime(state, { checkedMs: 200, phoneMs: 200 })
+    expect(state.session?.camera).toEqual({
+      checkedMs: 400,
+      focusedMs: 200,
+      phoneMs: 200,
+      postureCheckedMs: 0,
+      goodPostureMs: 0,
+    })
+    expect(timer.stop(state, MIN).finished?.camera?.checkedMs).toBe(400)
+  })
+
+  it('does nothing on a break or when idle', () => {
+    const onBreak = timer.advance(focus, settings, FOCUS_END + 1).state
+    expect(timer.addCameraTime(onBreak, { checkedMs: 200 })).toBe(onBreak)
+    expect(timer.addCameraTime(timer.IDLE, { checkedMs: 200 })).toBe(timer.IDLE)
+  })
+})
+
 describe('addDistraction', () => {
   it('appends to the session in order and is kept when it finishes', () => {
     let state = timer.addDistraction(focus, 1000, 'phone')

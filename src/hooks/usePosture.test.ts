@@ -89,6 +89,28 @@ describe('usePosture', () => {
     expect(result.current.alerting).toBe(false)
   })
 
+  it('reports posture time for the focus score, skipping checks it cannot see', () => {
+    const onMeasure = vi.fn()
+    const { result } = renderHook(() =>
+      usePosture({ watching: true, baseline, onAlert: vi.fn(), onMeasure }),
+    )
+    const send = (at: number, landmarks: Landmark[] | null) =>
+      act(() => result.current.handleFrame(frame(at, landmarks)))
+    send(0, UPRIGHT) // first check: nothing to measure yet
+    send(500, UPRIGHT)
+    send(1000, SLOUCHING)
+    send(1500, null) // can't see: not counted
+    send(2000, UPRIGHT)
+    const total = onMeasure.mock.calls.reduce(
+      (sum, [d]) => ({
+        checked: sum.checked + d.postureCheckedMs,
+        good: sum.good + d.goodPostureMs,
+      }),
+      { checked: 0, good: 0 },
+    )
+    expect(total).toEqual({ checked: 1500, good: 1000 })
+  })
+
   it('starts over after recalibrating', () => {
     const { result, feed, rerender } = setup()
     feed(SLOUCHING, 0, 15_000)

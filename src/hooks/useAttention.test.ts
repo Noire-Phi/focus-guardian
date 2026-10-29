@@ -161,6 +161,40 @@ describe('useAttention', () => {
     expect(result.current.alerting).toBe(false)
   })
 
+  it('reports the time each check stands for, for the focus score', () => {
+    const onMeasure = vi.fn()
+    const { result } = renderHook(() =>
+      useAttention({ watching: true, mode: 'book', calibration, onAlert: vi.fn(), onMeasure }),
+    )
+    const send = (f: TrackerFrame) => act(() => result.current.handleFrame(f))
+    send(AT_BOOK(0)) // first check: nothing to measure yet
+    send(AT_BOOK(200))
+    send(SIDEWAYS(400))
+    send(AT_BOOK(5000)) // a long gap is capped at 1 s
+    const total = onMeasure.mock.calls.reduce(
+      (sum, [d]) => ({
+        checkedMs: sum.checkedMs + d.checkedMs,
+        focusedMs: sum.focusedMs + d.focusedMs,
+        phoneMs: sum.phoneMs + d.phoneMs,
+      }),
+      { checkedMs: 0, focusedMs: 0, phoneMs: 0 },
+    )
+    expect(total).toEqual({ checkedMs: 1400, focusedMs: 1200, phoneMs: 0 })
+  })
+
+  it('counts phone time once a phone is confirmed', () => {
+    const onMeasure = vi.fn()
+    const { result } = renderHook(() =>
+      useAttention({ watching: true, mode: 'book', calibration, onAlert: vi.fn(), onMeasure }),
+    )
+    for (let at = 0; at <= 800; at += 200) {
+      act(() => result.current.handleFrame(frame(at, 0, -40, { phone: 0.9, book: 0 })))
+    }
+    // Confirmed on the 3rd check (400 ms); 400, 600 and 800 count as phone time
+    const phoneMs = onMeasure.mock.calls.reduce((sum, [d]) => sum + d.phoneMs, 0)
+    expect(phoneMs).toBe(600)
+  })
+
   it('treats no face as distracted', () => {
     const { result, feed, onAlert } = setup()
     feed((at) => frame(at, null), 0, 5000)

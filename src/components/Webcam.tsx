@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useEffectEvent, useRef } from 'react'
 import { useAttention } from '../hooks/useAttention'
 import { useCalibration } from '../hooks/useCalibration'
 import { useFaceTracker, type TrackerFrame } from '../hooks/useFaceTracker'
@@ -6,7 +6,9 @@ import { useLocalStorage } from '../hooks/useLocalStorage'
 import { usePosture } from '../hooks/usePosture'
 import { usePostureCalibration } from '../hooks/usePostureCalibration'
 import { useWebcam } from '../hooks/useWebcam'
+import type { CameraStats } from '../types'
 import { needsBookCalibration } from '../utils/attention'
+import { EMPTY_CAMERA_STATS, addCameraStats } from '../utils/focusScore'
 import { playChime } from '../utils/sound'
 import { loadAttentionPrefs, saveAttentionPrefs } from '../utils/storage'
 import { formatDuration } from '../utils/time'
@@ -19,9 +21,14 @@ interface Props {
   /** Run the focus check (only while a focus session is running) */
   watchAttention: boolean
   sound: boolean
+  /** Receives camera time for the focus score, about once a second */
+  onCameraStats?: (delta: CameraStats) => void
 }
 
-export function Webcam({ watchAttention, sound }: Props) {
+// How often collected camera time is passed on to the session
+const FLUSH_EVERY_MS = 1000
+
+export function Webcam({ watchAttention, sound, onCameraStats }: Props) {
   const camera = useWebcam()
   const videoRef = useRef<HTMLVideoElement>(null)
   const [prefs, setPrefs] = useLocalStorage(loadAttentionPrefs, saveAttentionPrefs)
@@ -36,10 +43,23 @@ export function Webcam({ watchAttention, sound }: Props) {
   // Posture is checked during a focus session once you've calibrated it, in any mode
   const watchingPosture = watchAttention && cameraOn && !calibrating && prefs.posture !== null
 
+  // Camera time is collected here and passed on in batches, so the session (which is
+  // saved on every change) isn't updated five times a second
+  const pendingStats = useRef<CameraStats>(EMPTY_CAMERA_STATS)
+  const collect = (delta: Partial<CameraStats>) => {
+    pendingStats.current = addCameraStats(pendingStats.current, delta)
+  }
+  const flush = useEffectEvent(() => {
+    if (pendingStats.current.checkedMs === 0 && pendingStats.current.postureCheckedMs === 0) return
+    onCameraStats?.(pendingStats.current)
+    pendingStats.current = EMPTY_CAMERA_STATS
+  })
+
   const attention = useAttention({
     watching,
     mode: studyMode,
     calibration,
+    onMeasure: collect,
     onAlert: () => {
       if (sound) playChime()
     },
@@ -48,6 +68,7 @@ export function Webcam({ watchAttention, sound }: Props) {
   const posture = usePosture({
     watching: watchingPosture,
     baseline: prefs.posture,
+    onMeasure: collect,
     onAlert: () => {
       if (sound) playChime()
     },
@@ -65,6 +86,16 @@ export function Webcam({ watchAttention, sound }: Props) {
       calibratePosture.handleFrame(frame)
     },
   })
+
+  const measuring = watching || watchingPosture
+  useEffect(() => {
+    if (!measuring) return
+    const id = setInterval(flush, FLUSH_EVERY_MS)
+    return () => {
+      clearInterval(id)
+      flush() // pass on what's left when the check stops
+    }
+  }, [measuring])
 
   // A MediaStream can't be passed as a prop, so attach it to the <video> directly
   useEffect(() => {

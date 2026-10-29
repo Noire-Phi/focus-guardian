@@ -87,6 +87,17 @@ describe('isValidMinutes', () => {
 })
 
 describe('sessions', () => {
+  it('round-trips camera stats, and older sessions without them', () => {
+    const camera = { checkedMs: 1, focusedMs: 1, phoneMs: 0, postureCheckedMs: 0, goodPostureMs: 0 }
+    saveSessions([{ ...finished, camera }, finished])
+    expect(loadSessions()).toEqual([{ ...finished, camera }, finished])
+  })
+
+  it('drops a session with broken camera stats', () => {
+    putRaw('sessions', [{ ...finished, camera: { checkedMs: -1 } }])
+    expect(loadSessions()).toEqual([])
+  })
+
   it('is empty when nothing is saved', () => {
     expect(loadSessions()).toEqual([])
   })

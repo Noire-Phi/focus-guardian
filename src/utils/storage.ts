@@ -1,4 +1,11 @@
-import type { Distraction, Session, SessionDraft, Settings, TimerState } from '../types'
+import type {
+  CameraStats,
+  Distraction,
+  Session,
+  SessionDraft,
+  Settings,
+  TimerState,
+} from '../types'
 import type { Calibration, Pose, StudyMode } from './attention'
 import type { PostureMetrics } from './posture'
 
@@ -62,7 +69,21 @@ function hasSessionFields(value: Record<string, unknown>): boolean {
     isNonNegativeNumber(value.tabLeaves) &&
     isNonNegativeNumber(value.awayMs) &&
     Array.isArray(value.distractions) &&
-    value.distractions.every(isDistraction)
+    value.distractions.every(isDistraction) &&
+    (value.camera === undefined || isCameraStats(value.camera))
+  )
+}
+
+function isCameraStats(value: unknown): value is CameraStats {
+  return (
+    isRecord(value) &&
+    [
+      value.checkedMs,
+      value.focusedMs,
+      value.phoneMs,
+      value.postureCheckedMs,
+      value.goodPostureMs,
+    ].every(isNonNegativeNumber)
   )
 }
 

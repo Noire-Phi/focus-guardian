@@ -6,8 +6,19 @@ interface Props {
 }
 
 export function TodaySummary({ summary }: Props) {
-  const { started, completed, focusMs, distractions, tabLeaves } = summary
+  const { started, completed, focusMs, distractions, tabLeaves, focusScore, lastScore } = summary
   const stats = [
+    {
+      label: 'Focus score',
+      value: focusScore === null ? '—' : `${focusScore}%`,
+      detail:
+        focusScore === null
+          ? 'turn on the camera during a session to get one'
+          : lastScore !== null
+            ? `last session ${lastScore}%`
+            : null,
+      wide: true,
+    },
     {
       label: 'Sessions',
       value: String(completed),
@@ -28,7 +39,10 @@ export function TodaySummary({ summary }: Props) {
       ) : (
         <dl className="summary__grid">
           {stats.map((s) => (
-            <div key={s.label} className="summary__stat">
+            <div
+              key={s.label}
+              className={'wide' in s ? 'summary__stat summary__stat--wide' : 'summary__stat'}
+            >
               <dt>{s.label}</dt>
               <dd>
                 <span className="summary__value">{s.value}</span>
