@@ -72,6 +72,7 @@ describe('settings', () => {
       sound: false,
       detections: { lookingAway: true, phone: false, posture: false, tabLeaves: true },
       sensitivity: 'high',
+      theme: 'dark',
     }
     expect(saveSettings(custom)).toBe(true)
     expect(loadSettings()).toEqual(custom)
@@ -100,7 +101,13 @@ describe('detection and sensitivity settings', () => {
       sound: false,
       detections: { lookingAway: true, phone: true, posture: true, tabLeaves: true },
       sensitivity: 'medium',
+      theme: 'system',
     })
+  })
+
+  it('drops an unknown theme', () => {
+    putRaw('settings', { ...DEFAULT_SETTINGS, theme: 'sepia' })
+    expect(loadSettings().theme).toBe('system')
   })
 
   it('keeps valid switches and turns bad ones back on, one by one', () => {

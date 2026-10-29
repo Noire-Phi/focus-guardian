@@ -1,42 +1,92 @@
+/*
+ * Design tokens. Everything in App.css is built from these, so colours, spacing and type
+ * stay consistent. See docs/DESIGN.md.
+ *
+ * Colours use light-dark(light, dark): the browser picks one from `color-scheme`, which
+ * follows the system unless the theme setting forces light or dark (data-theme on <html>).
+ */
 :root {
-  --text: #3f3b47;
-  --text-strong: #110f15;
-  --muted: #77727f;
-  --bg: #fbfaf8;
-  --surface: #ffffff;
-  --border: #e4e2e7;
-  --focus: #3b5bdb;
-  --focus-soft: rgba(59, 91, 219, 0.1);
-  --break: #2b8a3e;
-  --break-soft: rgba(43, 138, 62, 0.1);
-  --error: #c92a2a;
-  --error-soft: rgba(201, 42, 42, 0.08);
-
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
-
-  font: 16px/1.5 var(--sans);
   color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
+
+  /* Neutrals: warm paper greys, so the app feels calm rather than clinical */
+  --color-bg: light-dark(#f6f5f1, #121311);
+  --color-surface: light-dark(#ffffff, #1b1c1a);
+  --color-surface-sunken: light-dark(#efeee9, #161715);
+  --color-border: light-dark(#e3e1da, #2c2d2a);
+  --color-border-strong: light-dark(#cfccc3, #43443f);
+  --color-text: light-dark(#3b3a36, #d4d2cb);
+  --color-text-strong: light-dark(#171715, #f4f3ef);
+  --color-text-muted: light-dark(#6f6c64, #9a978f);
+
+  /* One accent, used for focus and for anything you can act on */
+  --color-accent: light-dark(#2f4fd0, #8b9ef5);
+  --color-accent-hover: light-dark(#2542b8, #a2b1f7);
+  --color-accent-soft: light-dark(#ebeefb, #222740);
+  --color-on-accent: light-dark(#ffffff, #0f1330);
+
+  /* Meaning: break / good, attention needed, distraction / error */
+  --color-success: light-dark(#2b7a4b, #6cc792);
+  --color-success-soft: light-dark(#e7f3ec, #1b2a21);
+  --color-warning: light-dark(#9a5b07, #e3a955);
+  --color-warning-soft: light-dark(#fbf1e2, #2d2416);
+  --color-danger: light-dark(#bf342d, #f0857d);
+  --color-danger-soft: light-dark(#fbebea, #321e1c);
+
+  /* Spacing: a 4 px scale. Use these, not raw pixel values. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Type */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Shape */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --border-width: 1px;
+  --shadow-float: 0 8px 24px light-dark(rgb(23 23 21 / 0.12), rgb(0 0 0 / 0.45));
+  --focus-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent);
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+
+  /* Layout */
+  --content-narrow: 480px;
+  --content-wide: 1080px;
+
+  font: var(--text-md) / var(--leading-normal) var(--font-sans);
+  color: var(--color-text);
+  background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #c9c6cf;
-    --text-strong: #f4f3f6;
-    --muted: #8d8896;
-    --bg: #15141a;
-    --surface: #1e1d24;
-    --border: #2f2d37;
-    --focus: #748ffc;
-    --focus-soft: rgba(116, 143, 252, 0.15);
-    --break: #69db7c;
-    --break-soft: rgba(105, 219, 124, 0.15);
-    --error: #ff8787;
-    --error-soft: rgba(255, 135, 135, 0.12);
-  }
+/* The theme setting: force light or dark, or leave it to the system */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
 }
 
 *,
@@ -48,8 +98,33 @@
 body {
   margin: 0;
   min-height: 100svh;
+  background: var(--color-bg);
 }
 
+h1,
+h2,
+h3,
 p {
   margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+  }
 }

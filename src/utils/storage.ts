@@ -6,6 +6,7 @@ import type {
   Sensitivity,
   SessionDraft,
   Settings,
+  Theme,
   TimerState,
 } from '../types'
 import type { Calibration, Pose, StudyMode } from './attention'
@@ -30,9 +31,11 @@ export const DEFAULT_SETTINGS: Settings = {
   sound: true,
   detections: { lookingAway: true, phone: true, posture: true, tabLeaves: true },
   sensitivity: 'medium',
+  theme: 'system',
 }
 
 const SENSITIVITIES: readonly Sensitivity[] = ['low', 'medium', 'high']
+const THEMES: readonly Theme[] = ['system', 'light', 'dark']
 
 /** Allowed whole-minute ranges, shared by loading and the settings form. */
 export const MINUTE_LIMITS = {
@@ -285,6 +288,7 @@ export function loadSettings(): Settings {
     sensitivity: SENSITIVITIES.includes(data.sensitivity as Sensitivity)
       ? (data.sensitivity as Sensitivity)
       : DEFAULT_SETTINGS.sensitivity,
+    theme: THEMES.includes(data.theme as Theme) ? (data.theme as Theme) : DEFAULT_SETTINGS.theme,
   }
 }
 

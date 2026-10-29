@@ -30,7 +30,7 @@ export function TodaySummary({ summary }: Props) {
   ]
 
   return (
-    <section className="summary" aria-labelledby="summary-title">
+    <section className="summary card" aria-labelledby="summary-title">
       <h2 id="summary-title" className="section-title">
         Today
       </h2>
