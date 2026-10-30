@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { MAX_CHECK_GAP_MS } from '../utils/detectionSchedule'
 import { ATTENTION, type Calibration, type ObjectScores, type StudyMode } from '../utils/attention'
 import { poseMatrix } from '../utils/poseMatrix.testutil'
 import { useAttention } from './useAttention'
@@ -170,7 +171,7 @@ describe('useAttention', () => {
     send(AT_BOOK(0)) // first check: nothing to measure yet
     send(AT_BOOK(200))
     send(SIDEWAYS(400))
-    send(AT_BOOK(5000)) // a long gap is capped at 1 s
+    send(AT_BOOK(5000)) // a long gap is capped at 2.5 s
     const total = onMeasure.mock.calls.reduce(
       (sum, [d]) => ({
         checkedMs: sum.checkedMs + d.checkedMs,
@@ -179,7 +180,11 @@ describe('useAttention', () => {
       }),
       { checkedMs: 0, focusedMs: 0, phoneMs: 0 },
     )
-    expect(total).toEqual({ checkedMs: 1400, focusedMs: 1200, phoneMs: 0 })
+    expect(total).toEqual({
+      checkedMs: 400 + MAX_CHECK_GAP_MS,
+      focusedMs: 200 + MAX_CHECK_GAP_MS,
+      phoneMs: 0,
+    })
   })
 
   it('counts phone time once a phone is confirmed', () => {

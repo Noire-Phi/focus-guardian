@@ -133,7 +133,7 @@ never alerts on its own:
 - To end a stretch, you must be back on task for **1 full second**. A quick glance back,
   or one misread frame, doesn't restart the count. (Without this, a flickering reading
   could keep resetting the timer and never alert.)
-- The alert fires **once** per stretch: a banner pinned to the top of the window, plus a
+- The alert fires **once** per stretch: a banner pinned to the bottom of the window, plus a
   chime if sound is on. It clears after a second back on task. (A confirmed phone starts
   the alert early; the 5 seconds passing later in the same stretch doesn't chime again.)
 - While the tab is hidden, checking pauses and starts fresh when you return (the tab

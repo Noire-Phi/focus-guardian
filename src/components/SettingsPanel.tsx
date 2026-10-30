@@ -92,7 +92,9 @@ export function SettingsPanel({ settings, onChange }: Props) {
             checked={settings.flash}
             onChange={(flash) => onChange({ ...settings, flash })}
           />
-          <p className="settings__note">Alerts also show as a message at the top of the window.</p>
+          <p className="settings__note">
+            Alerts also show as a message at the bottom of the window.
+          </p>
         </fieldset>
 
         <fieldset className="settings__group">

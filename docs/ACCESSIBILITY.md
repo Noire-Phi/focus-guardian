@@ -5,17 +5,17 @@ fixed, and how to keep it that way.
 
 ## Review summary
 
-| Area                | Before                                                                                            | Now                                                                                              |
-| ------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Text contrast       | Every text colour already 4.5:1 or more in both themes                                            | Unchanged (checked again, see below)                                                             |
-| Control edges       | Input borders and the selected segment were 1.2–1.9:1, under the 3:1 needed to find the control   | New `--color-border-control` token, 3.1:1 or more on every surface                               |
-| Keyboard focus      | Pressing Enter to start, Stop, Calibrate, OK and Reset removed the focused button: focus was lost | Focus moves to the next sensible control (`useRestoreFocus`)                                     |
-| Focus ring          | Drawn as a box-shadow only, which Windows high contrast mode removes                              | A transparent outline as well, which high contrast mode draws                                    |
-| Sound-only alerts   | The end of a phase was only a chime                                                               | A message at the top of the window, the time left in the tab title, and an optional screen flash |
-| Screen readers      | Phase ends and logged distractions weren't announced; the distraction alert re-read every second  | Announced once each through live regions                                                         |
-| Labels              | Switch names ran label and hint together; ✓ and — read as symbols; progress bars hidden           | Label as the name, hint as the description; "done" / "not yet"; real progress bars               |
-| Single-key shortcut | D could not be turned off (a problem for speech input)                                            | Settings → Keyboard, and exposed with `aria-keyshortcuts`                                        |
-| Form errors         | An out-of-range timer length only turned the border red                                           | A message says the allowed range, linked to the box with `aria-describedby`                      |
+| Area                | Before                                                                                            | Now                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Text contrast       | Every text colour already 4.5:1 or more in both themes                                            | Unchanged (checked again, see below)                                                                |
+| Control edges       | Input borders and the selected segment were 1.2–1.9:1, under the 3:1 needed to find the control   | New `--color-border-control` token, 3.1:1 or more on every surface                                  |
+| Keyboard focus      | Pressing Enter to start, Stop, Calibrate, OK and Reset removed the focused button: focus was lost | Focus moves to the next sensible control (`useRestoreFocus`)                                        |
+| Focus ring          | Drawn as a box-shadow only, which Windows high contrast mode removes                              | A transparent outline as well, which high contrast mode draws                                       |
+| Sound-only alerts   | The end of a phase was only a chime                                                               | A message at the bottom of the window, the time left in the tab title, and an optional screen flash |
+| Screen readers      | Phase ends and logged distractions weren't announced; the distraction alert re-read every second  | Announced once each through live regions                                                            |
+| Labels              | Switch names ran label and hint together; ✓ and — read as symbols; progress bars hidden           | Label as the name, hint as the description; "done" / "not yet"; real progress bars                  |
+| Single-key shortcut | D could not be turned off (a problem for speech input)                                            | Settings → Keyboard, and exposed with `aria-keyshortcuts`                                           |
+| Form errors         | An out-of-range timer length only turned the border red                                           | A message says the allowed range, linked to the box with `aria-describedby`                         |
 
 ## Keyboard
 
@@ -73,9 +73,9 @@ lines say what they mean in words.
 
 Every alert has a visual form:
 
-- **Phase ends**: a message at the top of the window that stays until you dismiss it or use
+- **Phase ends**: a message at the bottom of the window that stays until you dismiss it or use
   the timer, and the tab title changes ("4:59 Break", "Break’s over").
-- **Looking away, phone, posture**: a message at the top of the window while it lasts.
+- **Looking away, phone, posture**: a message at the bottom of the window while it lasts.
 - **Flash the screen** (Settings → Alerts, off by default): the window's edges light up once
   with each alert, so you notice it even when looking away. It's a single slow pulse, far
   from the three-flashes-a-second limit. With reduced motion on, the edges light up without

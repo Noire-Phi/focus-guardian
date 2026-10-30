@@ -195,6 +195,18 @@ describe('tab guard', () => {
     expect(back.session?.awayMs).toBe(5 * MIN)
   })
 
+  it('takes back the leave a refresh caused, but not time really spent away', () => {
+    const away = timer.leaveTab(focus, 2 * MIN)
+    const refreshed = timer.forgetReloadLeave(away, 2 * MIN + 3_000)
+    expect(refreshed.session).toMatchObject({ tabLeaves: 0, awaySince: null, awayMs: 0 })
+
+    // Away longer than a refresh takes: it stays a leave
+    expect(timer.forgetReloadLeave(away, 2 * MIN + timer.RELOAD_GRACE_MS + 1)).toBe(away)
+    // Nothing to take back
+    expect(timer.forgetReloadLeave(focus, 2 * MIN)).toBe(focus)
+    expect(timer.forgetReloadLeave(timer.IDLE, 0)).toBe(timer.IDLE)
+  })
+
   it('counts time away up to a stop', () => {
     const away = timer.leaveTab(focus, 2 * MIN)
     expect(timer.stop(away, 4 * MIN).finished?.awayMs).toBe(2 * MIN)

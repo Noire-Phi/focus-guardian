@@ -34,7 +34,13 @@ export function useCalibration(onDone: (calibration: Calibration) => void) {
   const recording = state.step === 'screen' || state.step === 'book'
 
   function handleFrame(frame: TrackerFrame) {
-    if (!recording || frame.hidden) return
+    if (!recording) return
+    // Tab hidden mid-step: start the step again when you're back, rather than finishing it
+    // with a gap in the middle
+    if (frame.hidden) {
+      if (state.run) setState({ ...state, run: null, now: 0 })
+      return
+    }
     const target = state.step as 'screen' | 'book'
     const pose = frame.face?.matrix ? headPose(frame.face.matrix) : null
     const run = addSample(state.run ?? startRun(target, frame.at), pose, frame.at)
@@ -80,5 +86,9 @@ export function useCalibration(onDone: (calibration: Calibration) => void) {
     },
     cancel: () => setState(IDLE),
     dismiss: () => setState(IDLE),
+    /** Stops a calibration in progress with a reason (e.g. the camera went off) */
+    interrupt: (error: string) => {
+      if (recording) setState({ ...IDLE, step: 'failed', error })
+    },
   }
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_BUSY_SHARE, MAX_DELAY_MS, nextCheckDelay, pickExtraCheck } from './detectionSchedule'
+import {
+  MAX_BUSY_SHARE,
+  MAX_CHECK_GAP_MS,
+  MAX_DELAY_MS,
+  nextCheckDelay,
+  pickExtraCheck,
+} from './detectionSchedule'
 
 describe('nextCheckDelay', () => {
   it('keeps the normal 200 ms when checks are quick', () => {
@@ -15,9 +21,17 @@ describe('nextCheckDelay', () => {
     expect(busy / (busy + wait)).toBeCloseTo(MAX_BUSY_SHARE)
   })
 
-  it('never waits longer than the cap, so focus time is still counted', () => {
-    expect(nextCheckDelay(1000, 200)).toBe(MAX_DELAY_MS)
-    expect(MAX_DELAY_MS).toBeLessThan(1000)
+  it('keeps a quarter even for very slow checks (400 ms, measured on a throttled run)', () => {
+    const busy = 400
+    expect(busy / (busy + nextCheckDelay(busy, 200))).toBeCloseTo(MAX_BUSY_SHARE)
+  })
+
+  it('never waits longer than the cap, and every gap still counts in full', () => {
+    expect(nextCheckDelay(5000, 200)).toBe(MAX_DELAY_MS)
+    // A check of up to 600 ms plus its wait fits in what one check may count for
+    for (const busy of [100, 300, 600]) {
+      expect(busy + nextCheckDelay(busy, 200)).toBeLessThanOrEqual(MAX_CHECK_GAP_MS)
+    }
   })
 })
 

@@ -19,10 +19,13 @@ const CHIME_WINDOW_MS = 90_000
  */
 export function useFocusTimer(settings: Settings, onSessionEnd: (session: Session) => void) {
   // Loaded as saved; the first tick catches up on anything that ended while the app was closed.
-  // If the tab was closed mid-session, that counts as time away, ending now.
+  // If the tab was closed mid-session, that counts as time away, ending now. A refresh isn't
+  // leaving: the page hides itself while unloading, so that "leave" is taken back.
   const [state, setState] = useState(() => {
     const saved = loadTimerState() ?? timer.IDLE
-    return document.visibilityState === 'visible' ? timer.returnToTab(saved, Date.now()) : saved
+    if (document.visibilityState !== 'visible') return saved
+    const now = Date.now()
+    return timer.returnToTab(isReload() ? timer.forgetReloadLeave(saved, now) : saved, now)
   })
   // The time of the last tick. Kept in state so rendering never reads the clock itself.
   const [now, setNow] = useState(() => Date.now())
@@ -42,6 +45,9 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
     const t = Date.now()
     setNow(t)
     const transition = timer.advance(state, settings, t)
+    // Nothing ended: leave the state alone. Writing it back would undo changes made since the
+    // last render, such as camera time passed on a moment ago from the camera's own timer.
+    if (transition.state === state) return
     // Alert when a phase just ended, but not when catching up on one that ended long ago
     const justEnded = state.endsAt !== null && t - state.endsAt < CHIME_WINDOW_MS
     if (transition.state.phase !== state.phase && justEnded && state.phase !== 'idle') {
@@ -65,12 +71,15 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
     () => {
       // Tab leaves switched off in Settings: don't count them
       if (!settings.detections.tabLeaves) return
-      const next = timer.leaveTab(state, Date.now())
-      setState(next)
+      const now = Date.now()
+      setState((s) => timer.leaveTab(s, now))
       // Save right away: the tab may be closing, and effects won't get another chance to run
-      saveTimerState(next)
+      saveTimerState(timer.leaveTab(state, now))
     },
-    () => setState(timer.returnToTab(state, Date.now())),
+    () => {
+      const now = Date.now()
+      setState((s) => timer.returnToTab(s, now))
+    },
   )
 
   // Each action updates `now` too, so the display is right before the next tick arrives
@@ -93,7 +102,10 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
     dismissPhaseEnded: () => setPhaseEnded(null),
     /** Adds camera time to the session in progress (functional update: safe from timers) */
     recordCamera: (delta: Partial<CameraStats>) => setState((s) => timer.addCameraTime(s, delta)),
-    addDistraction: (note: string) => setState(timer.addDistraction(state, Date.now(), note)),
+    addDistraction: (note: string) => {
+      const now = Date.now()
+      setState((s) => timer.addDistraction(s, now, note))
+    },
     start: (intention: string) =>
       act((t) => setState(timer.start(settings, t, crypto.randomUUID(), intention))),
     pause: () => act((t) => setState(timer.pause(state, t))),
@@ -102,4 +114,10 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
     skip: () => act((t) => apply(timer.skip(state, settings, t))),
     stop: () => act((t) => apply(timer.stop(state, t))),
   }
+}
+
+/** This page load is a refresh (F5, or the reload button), not opening the app afresh. */
+function isReload(): boolean {
+  const [entry] = performance.getEntriesByType?.('navigation') ?? []
+  return (entry as PerformanceNavigationTiming | undefined)?.type === 'reload'
 }

@@ -32,7 +32,7 @@ function App() {
   // Kept after a session ends, since the next session is often the same task
   const [intention, setIntention] = useState('')
   const [view, setView] = useState<View>('timer')
-  // Alerts from the timer and the camera share one stack at the top of the window
+  // Alerts from the timer and the camera share one stack at the bottom of the window
   const [alertStack, setAlertStack] = useState<HTMLDivElement | null>(null)
   const sessionRef = useRef<HTMLElement>(null)
   // Where to put focus in the session card: its main button, or the intention box if there's
@@ -93,7 +93,7 @@ function App() {
         </nav>
       </header>
 
-      {/* Fixed at the top of the window, so alerts are seen wherever the page is scrolled */}
+      {/* Fixed at the bottom of the window, so alerts are seen wherever the page is scrolled */}
       <div className="alert-stack" ref={setAlertStack}>
         {timer.phaseEnded && (
           <PhaseNotice

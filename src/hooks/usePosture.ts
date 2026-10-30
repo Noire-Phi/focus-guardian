@@ -9,11 +9,13 @@ import {
   type PostureReading,
 } from '../utils/posture'
 import type { CameraStats } from '../types'
+import { MAX_CHECK_GAP_MS } from '../utils/detectionSchedule'
 import { frameSpanMs } from '../utils/focusScore'
 import type { TrackerFrame } from './useFaceTracker'
 
-// A posture check normally comes every 600 ms; never count one as more than 1.5 s
-const MAX_POSTURE_SPAN_MS = 1500
+// A posture check normally comes every 600 ms; it runs on every other face check at most, so
+// on a slow computer up to two face-check gaps apart. Never count one as more than that.
+const MAX_POSTURE_SPAN_MS = 2 * MAX_CHECK_GAP_MS
 
 /**
  * Compares your posture with your calibrated good posture while `watching`. Bad posture

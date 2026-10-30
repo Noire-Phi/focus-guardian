@@ -17,11 +17,13 @@ import {
   type StudyMode,
 } from '../utils/attention'
 import type { CameraStats } from '../types'
+import { MAX_CHECK_GAP_MS } from '../utils/detectionSchedule'
 import { frameSpanMs } from '../utils/focusScore'
 import type { TrackerFrame } from './useFaceTracker'
 
-// A face check normally comes every 200 ms; never count one as more than a second
-const MAX_FRAME_SPAN_MS = 1000
+// A face check normally comes every 200 ms, or up to ~2.5 s apart on a slow computer;
+// never count one as more than that
+const MAX_FRAME_SPAN_MS = MAX_CHECK_GAP_MS
 
 /**
  * Judges camera frames (from useFaceTracker) while `watching`: focused or distracted for

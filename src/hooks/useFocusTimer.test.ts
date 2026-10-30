@@ -188,6 +188,36 @@ describe('useFocusTimer', () => {
     expect(second.result.current.remainingMs).toBe(18 * MIN)
   })
 
+  describe('refreshing the page', () => {
+    /** Simulates leaving (the page hides as it unloads), then loading again as `type`. */
+    function reloadAfter(ms: number, type: 'reload' | 'navigate') {
+      const first = setup()
+      act(() => first.result.current.start('x'))
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      first.unmount()
+      vi.restoreAllMocks()
+
+      vi.setSystemTime(Date.now() + ms)
+      vi.spyOn(performance, 'getEntriesByType').mockReturnValue([
+        { type } as unknown as PerformanceEntry,
+      ])
+      const second = setup()
+      vi.restoreAllMocks()
+      return second.result.current.session
+    }
+
+    it('is not counted as leaving the tab', () => {
+      expect(reloadAfter(1_500, 'reload')).toMatchObject({ tabLeaves: 0, awayMs: 0 })
+    })
+
+    it('still counts closing the tab and opening the app again later', () => {
+      expect(reloadAfter(30_000, 'navigate')).toMatchObject({ tabLeaves: 1, awayMs: 30_000 })
+    })
+  })
+
   it('does not count leaving the tab when that check is off in Settings', () => {
     const { result } = setup({
       ...settings,
@@ -272,6 +302,22 @@ describe('useFocusTimer', () => {
         result.current.recordCamera({ checkedMs: 1000, focusedMs: 1000 })
       })
       expect(result.current.session?.camera).toMatchObject({ checkedMs: 2000, focusedMs: 1800 })
+    })
+
+    it('keeps camera time that arrives just before a clock tick', () => {
+      // The camera passes on its time from its own timer; the clock ticks from another. When
+      // both fire before React re-renders, the tick must not overwrite the camera's update.
+      const { result } = setup()
+      act(() => result.current.start('x'))
+      act(() => {
+        result.current.recordCamera({ checkedMs: 1000, focusedMs: 1000 })
+        vi.advanceTimersByTime(250)
+      })
+      act(() => {
+        result.current.recordCamera({ checkedMs: 1000, focusedMs: 1000 })
+        vi.advanceTimersByTime(250)
+      })
+      expect(result.current.session?.camera?.checkedMs).toBe(2000)
     })
 
     it('logs distractions with the time and note', () => {

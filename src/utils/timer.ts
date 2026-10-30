@@ -67,6 +67,25 @@ export function leaveTab(state: TimerState, now: number): TimerState {
   return { ...state, session: { ...session, tabLeaves: session.tabLeaves + 1, awaySince: now } }
 }
 
+/** A refresh has to happen this soon after the page hid itself to count as a refresh. */
+export const RELOAD_GRACE_MS = 10_000
+
+/**
+ * Takes back the tab leave recorded as the page unloaded for a refresh: refreshing isn't
+ * getting distracted. Only a leave from the last few seconds is taken back, so time really
+ * spent away (say, a tab the browser reloaded after a long while) still counts.
+ */
+export function forgetReloadLeave(state: TimerState, now: number): TimerState {
+  const { session } = state
+  if (!session || session.awaySince === null || now - session.awaySince > RELOAD_GRACE_MS) {
+    return state
+  }
+  return {
+    ...state,
+    session: { ...session, tabLeaves: Math.max(0, session.tabLeaves - 1), awaySince: null },
+  }
+}
+
 /** You came back. Away time is counted up to the end of the session at most. */
 export function returnToTab(state: TimerState, now: number): TimerState {
   const { session } = state

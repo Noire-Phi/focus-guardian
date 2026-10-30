@@ -6,7 +6,7 @@ import type { CameraStats, Settings } from '../types'
 import { alertCue } from '../utils/alerts'
 import { poseMatrix } from '../utils/poseMatrix.testutil'
 import { DEFAULT_SETTINGS, saveAttentionPrefs } from '../utils/storage'
-import { Webcam } from './Webcam'
+import { CAMERA_LOST, Webcam } from './Webcam'
 
 // The camera card's wiring: when detection runs, how camera time reaches the session, and
 // when alerts show. The camera and MediaPipe are faked; the tracker hands us its options, and
@@ -19,9 +19,16 @@ type TrackerOptions = {
   onFrame: (frame: TrackerFrame) => void
 }
 const tracker = vi.hoisted(() => ({ options: null as unknown as TrackerOptions }))
+const camera = vi.hoisted(() => ({ status: 'active' }))
 
 vi.mock('../hooks/useWebcam', () => ({
-  useWebcam: () => ({ status: 'active', stream: null, error: null, start: vi.fn(), stop: vi.fn() }),
+  useWebcam: () => ({
+    status: camera.status,
+    stream: null,
+    error: null,
+    start: vi.fn(),
+    stop: vi.fn(),
+  }),
 }))
 vi.mock('../hooks/useFaceTracker', () => ({
   useFaceTracker: (_ref: unknown, options: TrackerOptions) => {
@@ -37,6 +44,7 @@ const SIDEWAYS = { matrix: poseMatrix(70, 0), blendshapes: {} }
 let alertRoot: HTMLDivElement
 
 beforeEach(() => {
+  camera.status = 'active'
   vi.useFakeTimers()
   localStorage.clear()
   vi.mocked(alertCue).mockClear()
@@ -155,5 +163,18 @@ describe('Webcam', () => {
     expect(alertRoot.textContent).toMatch(/Eyes back/)
     play(ON_SCREEN, 1400)
     expect(alertRoot.textContent).toBe('')
+  })
+
+  it('stops calibrating with a reason if the camera goes off partway', () => {
+    const { rerender } = setup({ watchAttention: false })
+    act(() => {
+      screen.getByRole('button', { name: 'Calibrate' }).click()
+    })
+    expect(screen.getByText(/Step 1 of 2/)).toBeTruthy()
+
+    camera.status = 'error'
+    rerender({ watchAttention: false })
+    expect(screen.queryByText(/Step 1 of 2/)).toBeNull()
+    expect(screen.getByRole('alert').textContent).toBe(CAMERA_LOST)
   })
 })

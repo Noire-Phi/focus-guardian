@@ -92,6 +92,46 @@ describe('useCalibration', () => {
     expect(onDone).not.toHaveBeenCalled()
   })
 
+  it('starts a step again after the tab was hidden partway, instead of finishing with a gap', () => {
+    const { result, step } = setup()
+    act(() => result.current.start())
+    const send = (at: number, hidden = false) =>
+      act(() =>
+        result.current.handleFrame({
+          at,
+          hidden,
+          face: hidden ? null : { matrix: poseMatrix(0, 0), blendshapes: {} },
+          objects: null,
+          pose: null,
+        }),
+      )
+    send(0)
+    // Partway through recording, after the moment to get ready
+    send(CALIBRATION.settleMs + 500)
+    expect(result.current.progress).toBeGreaterThan(0)
+    send(CALIBRATION.settleMs + 600, true)
+    expect(result.current.progress).toBe(0)
+    expect(result.current.phase).toBe('settle')
+
+    // Back much later: one frame must not complete the step
+    send(60_000)
+    expect(result.current.step).toBe('screen')
+    step(60_200, 0)
+    expect(result.current.step).toBe('book')
+  })
+
+  it('stops with a reason when interrupted (the camera went off), only while recording', () => {
+    const { result, onDone } = setup()
+    act(() => result.current.interrupt('camera off'))
+    expect(result.current.step).toBe('idle')
+
+    act(() => result.current.start())
+    act(() => result.current.interrupt('camera off'))
+    expect(result.current.step).toBe('failed')
+    expect(result.current.error).toBe('camera off')
+    expect(onDone).not.toHaveBeenCalled()
+  })
+
   it('cancel stops without saving', () => {
     const { result, onDone, step } = setup()
     act(() => result.current.start())
