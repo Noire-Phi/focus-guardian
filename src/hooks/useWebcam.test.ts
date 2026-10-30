@@ -28,9 +28,19 @@ function pending() {
 
 const getUserMedia = vi.fn<(c: MediaStreamConstraints) => Promise<MediaStream>>()
 
+/** What the browser says about camera permission: 'granted', 'prompt', 'denied', or no API. */
+let permission: PermissionState | 'no-api' = 'granted'
+
 beforeEach(() => {
   getUserMedia.mockReset()
-  vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } })
+  sessionStorage.clear()
+  permission = 'granted'
+  vi.stubGlobal('navigator', {
+    mediaDevices: { getUserMedia },
+    get permissions() {
+      return permission === 'no-api' ? undefined : { query: async () => ({ state: permission }) }
+    },
+  })
 })
 
 afterEach(() => {
@@ -176,5 +186,63 @@ describe('useWebcam', () => {
     await act(() => result.current.start())
     unmount()
     expect(track.stop).toHaveBeenCalled()
+  })
+
+  describe('after a refresh', () => {
+    /** Turns the camera on, then "refreshes": the hook goes away and a new one starts. */
+    async function refreshWhileOn() {
+      getUserMedia.mockResolvedValue(fakeStream().stream)
+      const first = renderHook(() => useWebcam())
+      await act(() => first.result.current.start())
+      first.unmount()
+      getUserMedia.mockClear()
+      const second = renderHook(() => useWebcam())
+      await act(async () => {})
+      return second.result
+    }
+
+    it('turns the camera back on if it was on and is still allowed', async () => {
+      const result = await refreshWhileOn()
+      expect(getUserMedia).toHaveBeenCalledOnce()
+      expect(result.current.status).toBe('active')
+    })
+
+    it('never asks for permission by itself', async () => {
+      permission = 'prompt'
+      const result = await refreshWhileOn()
+      expect(getUserMedia).not.toHaveBeenCalled()
+      expect(result.current.status).toBe('idle')
+    })
+
+    it('stays off when the browser cannot say whether it is allowed', async () => {
+      permission = 'no-api'
+      const result = await refreshWhileOn()
+      expect(getUserMedia).not.toHaveBeenCalled()
+      expect(result.current.status).toBe('idle')
+    })
+
+    it('stays off if you turned it off, or it failed, before the refresh', async () => {
+      getUserMedia.mockResolvedValue(fakeStream().stream)
+      const turnedOff = renderHook(() => useWebcam())
+      await act(() => turnedOff.result.current.start())
+      act(() => turnedOff.result.current.stop())
+      turnedOff.unmount()
+
+      getUserMedia.mockRejectedValueOnce(new DOMException('', 'NotReadableError'))
+      const failed = renderHook(() => useWebcam())
+      await act(() => failed.result.current.start())
+      failed.unmount()
+
+      getUserMedia.mockClear()
+      renderHook(() => useWebcam())
+      await act(async () => {})
+      expect(getUserMedia).not.toHaveBeenCalled()
+    })
+
+    it('does not turn on for a fresh visit', async () => {
+      renderHook(() => useWebcam())
+      await act(async () => {})
+      expect(getUserMedia).not.toHaveBeenCalled()
+    })
   })
 })

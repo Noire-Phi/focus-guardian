@@ -30,7 +30,12 @@ export function usePostureCalibration(onDone: (baseline: PostureMetrics) => void
   const recording = state.step === 'recording'
 
   function handleFrame(frame: TrackerFrame) {
-    if (!recording || frame.hidden) return
+    if (!recording) return
+    // Tab hidden partway: start again when you're back, rather than finishing with a gap
+    if (frame.hidden) {
+      if (state.run) setState({ ...state, run: null, now: 0 })
+      return
+    }
     const sample = frame.pose ? measurePosture(frame.pose.landmarks) : null
     const run = addSample(
       state.run ?? startRun<PostureMetrics>('posture', frame.at),
@@ -63,5 +68,9 @@ export function usePostureCalibration(onDone: (baseline: PostureMetrics) => void
     start: () => setState({ ...IDLE, step: 'recording' }),
     cancel: () => setState(IDLE),
     dismiss: () => setState(IDLE),
+    /** Stops a calibration in progress with a reason (e.g. the camera went off) */
+    interrupt: (error: string) => {
+      if (recording) setState({ ...IDLE, step: 'failed', error })
+    },
   }
 }

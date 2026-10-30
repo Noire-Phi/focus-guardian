@@ -237,6 +237,7 @@
 /* Narrow: one column. Wide: the session on the left, the rest beside it. */
 .timer-view {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
 }
 
@@ -340,6 +341,18 @@
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
   color: var(--color-text-strong);
+}
+
+/* A phone on its side: a smaller clock, so the buttons fit on screen without scrolling */
+@media (orientation: landscape) and (max-height: 480px) {
+  .timer {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .timer__clock {
+    margin-top: var(--space-1);
+    font-size: 3rem;
+  }
 }
 
 .intention {
@@ -636,11 +649,13 @@
   color: var(--color-success);
 }
 
-/* ── Alerts (fixed at the top of the window, stacked) ───────────────────────── */
+/* ── Alerts (fixed at the bottom of the window, stacked) ────────────────────── */
 
+/* At the bottom, not the top: at the top they covered the Timer / Dashboard switch, and the
+   end-of-phase message stays until dismissed. Clear of a phone's home bar too. */
 .alert-stack {
   position: fixed;
-  top: var(--space-4);
+  bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
   left: 50%;
   z-index: 10;
   width: min(440px, calc(100% - 2 * var(--space-4)));
@@ -800,8 +815,11 @@
 
 /* ── Dashboard ──────────────────────────────────────────────────────────────── */
 
+/* minmax(0, 1fr), not the default auto: a chart's canvas is 300 px wide until Chart.js sizes
+   it, and an auto column grew to fit that, so the page scrolled sideways on small phones */
 .dashboard {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
 }
 

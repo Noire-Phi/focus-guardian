@@ -4,10 +4,15 @@
 /** Detection may use at most this share of the main thread, even on a slow computer. */
 export const MAX_BUSY_SHARE = 0.25
 /**
- * The longest wait between checks. Under the 1 s that one face check may count for (see
- * useAttention), so a slow computer still gets every second of focus time counted.
+ * The longest wait between checks. Enough to keep a check of up to ~650 ms (a slow computer
+ * without a GPU) at a quarter of the main thread.
  */
-export const MAX_DELAY_MS = 800
+export const MAX_DELAY_MS = 2000
+/**
+ * The longest one face check may count for in the focus score: covers a check of up to
+ * ~600 ms plus its wait (600 + 1800). Gaps from a hidden tab don't reach this: the checks reset when it's hidden.
+ */
+export const MAX_CHECK_GAP_MS = 2500
 
 /**
  * How long to wait after a check that took `lastCheckMs`. Normally `baseMs` (200 ms). A check

@@ -25,7 +25,7 @@ interface Props {
   watchAttention: boolean
   /** Alert sound and flash, which checks are on, and how sensitive they are */
   settings: Pick<Settings, 'sound' | 'flash' | 'detections' | 'sensitivity'>
-  /** Where alerts are shown (the app's alert stack at the top of the window) */
+  /** Where alerts are shown (the app's alert stack at the bottom of the window) */
   alertRoot?: HTMLElement | null
   /** Receives camera time for the focus score, about once a second */
   onCameraStats?: (delta: CameraStats) => void
@@ -33,6 +33,9 @@ interface Props {
 
 // How often collected camera time is passed on to the session
 const FLUSH_EVERY_MS = 1000
+
+export const CAMERA_LOST =
+  'The camera went off, so calibration stopped. Turn it back on and try again.'
 
 export function Webcam({ watchAttention, settings, alertRoot, onCameraStats }: Props) {
   const { detections } = settings
@@ -99,6 +102,16 @@ export function Webcam({ watchAttention, settings, alertRoot, onCameraStats }: P
       calibratePosture.handleFrame(frame)
     },
   })
+
+  // The camera went off mid-calibration (unplugged, or turned off): stop with a reason instead
+  // of waiting for frames that will never come
+  const stopCalibrating = useEffectEvent(() => {
+    calibrate.interrupt(CAMERA_LOST)
+    calibratePosture.interrupt(CAMERA_LOST)
+  })
+  useEffect(() => {
+    if (!cameraOn) stopCalibrating()
+  }, [cameraOn])
 
   const measuring = watching || watchingPosture
   useEffect(() => {

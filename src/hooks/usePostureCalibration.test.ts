@@ -47,6 +47,40 @@ describe('usePostureCalibration', () => {
     expect(onDone).not.toHaveBeenCalled()
   })
 
+  it('starts again after the tab was hidden partway', () => {
+    const { result } = setup()
+    act(() => result.current.start())
+    const send = (at: number, hidden = false) =>
+      act(() =>
+        result.current.handleFrame({
+          at,
+          hidden,
+          face: null,
+          objects: null,
+          pose: hidden ? null : { landmarks: body() },
+        }),
+      )
+    send(0)
+    // Partway through recording, after the moment to get ready
+    send(CALIBRATION.settleMs + 500)
+    expect(result.current.progress).toBeGreaterThan(0)
+    send(CALIBRATION.settleMs + 600, true)
+    expect(result.current.progress).toBe(0)
+    send(60_000)
+    expect(result.current.step).toBe('recording')
+  })
+
+  it('stops with a reason when interrupted, only while recording', () => {
+    const { result, onDone } = setup()
+    act(() => result.current.interrupt('camera off'))
+    expect(result.current.step).toBe('idle')
+    act(() => result.current.start())
+    act(() => result.current.interrupt('camera off'))
+    expect(result.current.step).toBe('failed')
+    expect(result.current.error).toBe('camera off')
+    expect(onDone).not.toHaveBeenCalled()
+  })
+
   it('cancel stops without saving', () => {
     const { result, onDone } = setup()
     act(() => result.current.start())

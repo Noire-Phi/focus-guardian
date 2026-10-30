@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { checkWebcamSupport, toWebcamError, webcamError, type WebcamError } from '../utils/webcam'
 
 export type WebcamStatus = 'idle' | 'starting' | 'active' | 'error'
@@ -12,10 +12,44 @@ export const VIDEO: MediaTrackConstraints = {
   frameRate: { ideal: 15 },
 }
 
+// Remembers, for this tab only, that the camera was on, so a refresh can turn it back on
+const WAS_ON_KEY = 'focus-guardian:camera-on'
+
+function rememberOn(on: boolean) {
+  try {
+    if (on) sessionStorage.setItem(WAS_ON_KEY, '1')
+    else sessionStorage.removeItem(WAS_ON_KEY)
+  } catch {
+    // Storage blocked: the camera just won't come back on by itself after a refresh
+  }
+}
+
+function wasOn(): boolean {
+  try {
+    return sessionStorage.getItem(WAS_ON_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** True only if the browser will give the camera without asking (never shows a prompt). */
+async function cameraAllowed(): Promise<boolean> {
+  try {
+    const status = await navigator.permissions.query({ name: 'camera' as PermissionName })
+    return status.state === 'granted'
+  } catch {
+    // Browsers that can't say (or no Permissions API): don't guess
+    return false
+  }
+}
+
 /**
  * Turns the camera on and off. The camera is only requested when you call `start`,
  * and it's always released on `stop` or when the component using this unmounts.
  * Failures come back as `error` with a title and message to show (see utils/webcam.ts).
+ *
+ * If the camera was on in this tab before a refresh, it's turned back on, but only when the
+ * browser already allows it, so a refresh never brings up a permission prompt by itself.
  */
 export function useWebcam() {
   const [status, setStatus] = useState<WebcamStatus>('idle')
@@ -33,6 +67,7 @@ export function useWebcam() {
   }
 
   function fail(next: WebcamError) {
+    rememberOn(false)
     releaseCamera()
     setStream(null)
     setError(next)
@@ -65,18 +100,33 @@ export function useWebcam() {
       })
       setStream(next)
       setStatus('active')
+      rememberOn(true)
     } catch (err) {
       if (request === requestRef.current) fail(toWebcamError(err))
     }
   }
 
   function stop() {
+    rememberOn(false)
     requestRef.current++
     releaseCamera()
     setStream(null)
     setError(null)
     setStatus('idle')
   }
+
+  // Back after a refresh: turn the camera on again if it was on and is still allowed
+  const resume = useEffectEvent(() => void start())
+  useEffect(() => {
+    if (!wasOn()) return
+    let cancelled = false
+    void cameraAllowed().then((allowed) => {
+      if (!cancelled && allowed) resume()
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(
     () => () => {
