@@ -150,3 +150,7 @@ camera; hooks connect them to React, and components only display.
 - **Test with screen readers** (NVDA, VoiceOver). The accessibility work was checked in code
   and the browser, not with assistive technology.
 - **Check Firefox and Safari.**
+
+## License
+
+[MIT](LICENSE)
