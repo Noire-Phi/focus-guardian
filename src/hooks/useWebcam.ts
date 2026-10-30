@@ -3,6 +3,15 @@ import { checkWebcamSupport, toWebcamError, webcamError, type WebcamError } from
 
 export type WebcamStatus = 'idle' | 'starting' | 'active' | 'error'
 
+// The checks look at 5 frames a second and the models shrink each frame to 256 px or less,
+// so a small, slower stream is plenty and saves the camera and browser work. "ideal" means
+// any camera still works: it gets as close as it can.
+export const VIDEO: MediaTrackConstraints = {
+  width: { ideal: 640 },
+  height: { ideal: 480 },
+  frameRate: { ideal: 15 },
+}
+
 /**
  * Turns the camera on and off. The camera is only requested when you call `start`,
  * and it's always released on `stop` or when the component using this unmounts.
@@ -44,7 +53,7 @@ export function useWebcam() {
     setStatus('starting')
 
     try {
-      const next = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      const next = await navigator.mediaDevices.getUserMedia({ video: VIDEO, audio: false })
       if (request !== requestRef.current) {
         // Stopped or unmounted while the browser was asking: don't leave the camera on
         next.getTracks().forEach((track) => track.stop())
