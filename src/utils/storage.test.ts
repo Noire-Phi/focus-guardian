@@ -70,6 +70,8 @@ describe('settings', () => {
       focusMinutes: 50,
       breakMinutes: 10,
       sound: false,
+      flash: true,
+      shortcut: false,
       detections: { lookingAway: true, phone: false, posture: false, tabLeaves: true },
       sensitivity: 'high',
       theme: 'dark',
@@ -99,10 +101,17 @@ describe('detection and sensitivity settings', () => {
       focusMinutes: 50,
       breakMinutes: 10,
       sound: false,
+      flash: false,
+      shortcut: true,
       detections: { lookingAway: true, phone: true, posture: true, tabLeaves: true },
       sensitivity: 'medium',
       theme: 'system',
     })
+  })
+
+  it('drops bad flash and shortcut switches', () => {
+    putRaw('settings', { ...DEFAULT_SETTINGS, flash: 'yes', shortcut: 0 })
+    expect(loadSettings()).toMatchObject({ flash: false, shortcut: true })
   })
 
   it('drops an unknown theme', () => {

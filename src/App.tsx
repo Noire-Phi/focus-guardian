@@ -1,7 +1,9 @@
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import './App.css'
 import { DistractionLog } from './components/DistractionLog'
 import { IntentionInput } from './components/IntentionInput'
+import { PhaseNotice } from './components/PhaseNotice'
 import { SettingsPanel } from './components/SettingsPanel'
 import { TimerControls } from './components/TimerControls'
 import { TimerDisplay } from './components/TimerDisplay'
@@ -9,10 +11,13 @@ import { TodaySummary } from './components/TodaySummary'
 import { Webcam } from './components/Webcam'
 import { useFocusTimer } from './hooks/useFocusTimer'
 import { useLocalStorage } from './hooks/useLocalStorage'
+import { focusFirst, useRestoreFocus } from './hooks/useRestoreFocus'
 import type { Session } from './types'
+import { phaseEndedMessage } from './utils/phaseEnd'
 import { summarizeDay } from './utils/stats'
 import { loadSessions, loadSettings, saveSessions, saveSettings } from './utils/storage'
 import { applyTheme } from './utils/theme'
+import { pageTitle } from './utils/title'
 
 // Loaded only when first opened, so Chart.js isn't part of the app's first load
 const Dashboard = lazy(() =>
@@ -27,6 +32,12 @@ function App() {
   // Kept after a session ends, since the next session is often the same task
   const [intention, setIntention] = useState('')
   const [view, setView] = useState<View>('timer')
+  // Alerts from the timer and the camera share one stack at the top of the window
+  const [alertStack, setAlertStack] = useState<HTMLDivElement | null>(null)
+  const sessionRef = useRef<HTMLElement>(null)
+  // Where to put focus in the session card: its main button, or the intention box if there's
+  // nothing to start yet
+  const sessionTarget = ['.controls button:not(:disabled)', '.intention__input']
 
   useEffect(() => {
     applyTheme(settings.theme)
@@ -38,6 +49,27 @@ function App() {
 
   const timer = useFocusTimer(settings, addSession)
   const canStart = intention.trim() !== ''
+  // Pressing Enter in the intention box removes it, Stop removes itself: keep focus here
+  useRestoreFocus(sessionRef, sessionTarget)
+
+  // The time left in the tab title, so it can be seen from other tabs and windows
+  useEffect(() => {
+    document.title = pageTitle(timer.phase, timer.remainingMs, timer.isPaused, timer.phaseEnded)
+  }, [timer.phase, timer.remainingMs, timer.isPaused, timer.phaseEnded])
+
+  const notice = timer.phaseEnded && phaseEndedMessage(timer.phaseEnded, settings.breakMinutes)
+
+  // Dismiss removes its own button: carry on from the timer's main button
+  function dismissNotice() {
+    timer.dismissPhaseEnded()
+    focusFirst(sessionRef.current, sessionTarget)
+  }
+
+  // From the dashboard's empty state: show the timer and put focus where you'd start
+  function goToTimer() {
+    flushSync(() => setView('timer'))
+    focusFirst(sessionRef.current, ['.intention__input', ...sessionTarget])
+  }
 
   function startFocus() {
     if (canStart && timer.phase === 'idle') timer.start(intention.trim())
@@ -61,17 +93,37 @@ function App() {
         </nav>
       </header>
 
+      {/* Fixed at the top of the window, so alerts are seen wherever the page is scrolled */}
+      <div className="alert-stack" ref={setAlertStack}>
+        {timer.phaseEnded && (
+          <PhaseNotice
+            ended={timer.phaseEnded}
+            breakMinutes={settings.breakMinutes}
+            onDismiss={dismissNotice}
+          />
+        )}
+      </div>
+      {/* Read out by screen readers; always on the page, so changes are announced */}
+      <p className="visually-hidden" role="status">
+        {notice ? `${notice.title}. ${notice.text}` : ''}
+      </p>
+
       <main className="app__main">
         {view === 'dashboard' && (
           <Suspense fallback={<p className="empty-note">Loading dashboard…</p>}>
-            <Dashboard sessions={sessions} now={timer.now} onGoToTimer={() => setView('timer')} />
+            <Dashboard sessions={sessions} now={timer.now} onGoToTimer={goToTimer} />
           </Suspense>
         )}
 
         {/* Hidden rather than removed, so the timer and camera keep running on the dashboard.
             Two columns on wide screens: the session on the left, everything else beside it. */}
         <div className="timer-view" hidden={view !== 'timer'}>
-          <section className="timer-view__session card" aria-label="Focus session">
+          <section
+            ref={sessionRef}
+            className="timer-view__session card"
+            aria-label="Focus session"
+            tabIndex={-1}
+          >
             <TimerDisplay
               phase={timer.phase}
               remainingMs={timer.remainingMs}
@@ -100,6 +152,7 @@ function App() {
                 distractions={timer.session.distractions}
                 tabLeaves={timer.session.tabLeaves}
                 awayMs={timer.session.awayMs}
+                shortcut={settings.shortcut}
                 onAdd={timer.addDistraction}
               />
             )}
@@ -110,6 +163,7 @@ function App() {
             <Webcam
               watchAttention={timer.phase === 'focus' && !timer.isPaused}
               settings={settings}
+              alertRoot={alertStack}
               onCameraStats={timer.recordCamera}
             />
             <SettingsPanel settings={settings} onChange={setSettings} />

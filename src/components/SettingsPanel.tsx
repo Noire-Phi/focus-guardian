@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useId, useRef, useState } from 'react'
+import { useRestoreFocus } from '../hooks/useRestoreFocus'
 import type { Detections, Sensitivity, Settings, Theme } from '../types'
 import { SENSITIVITY_HINTS } from '../utils/sensitivity'
 import { DEFAULT_SETTINGS, isValidMinutes, MINUTE_LIMITS } from '../utils/storage'
@@ -32,11 +33,14 @@ const SENSITIVITIES: { value: Sensitivity; label: string }[] = [
 export function SettingsPanel({ settings, onChange }: Props) {
   // Bumped on reset so the minute boxes, which keep their own text, start over
   const [resetCount, setResetCount] = useState(0)
+  // Reset rebuilds the form, Reset button included: keep focus on it
+  const panelRef = useRef<HTMLDetailsElement>(null)
+  useRestoreFocus(panelRef, '.settings__reset')
   const setDetection = (key: keyof Detections, on: boolean) =>
     onChange({ ...settings, detections: { ...settings.detections, [key]: on } })
 
   return (
-    <details className="settings card">
+    <details className="settings card" ref={panelRef}>
       <summary className="section-title">Settings</summary>
       <div className="settings__body" key={resetCount}>
         <fieldset className="settings__group">
@@ -57,8 +61,8 @@ export function SettingsPanel({ settings, onChange }: Props) {
         </fieldset>
 
         <fieldset className="settings__group">
-          <legend>Appearance</legend>
-          <div className="settings__segmented" role="radiogroup" aria-label="Theme">
+          <legend>Theme</legend>
+          <div className="settings__segmented">
             {THEMES.map((t) => (
               <label key={t.value}>
                 <input
@@ -76,33 +80,41 @@ export function SettingsPanel({ settings, onChange }: Props) {
 
         <fieldset className="settings__group">
           <legend>Alerts</legend>
-          <label className="settings__row">
-            <span>
-              Alert sound
-              <small className="settings__hint">When a phase ends, and with each alert</small>
-            </span>
-            <input
-              type="checkbox"
-              checked={settings.sound}
-              onChange={(e) => onChange({ ...settings, sound: e.target.checked })}
-            />
-          </label>
+          <ToggleRow
+            label="Alert sound"
+            hint="When a phase ends, and with each alert"
+            checked={settings.sound}
+            onChange={(sound) => onChange({ ...settings, sound })}
+          />
+          <ToggleRow
+            label="Flash the screen"
+            hint="The window’s edges light up with each alert, so you see it without the sound"
+            checked={settings.flash}
+            onChange={(flash) => onChange({ ...settings, flash })}
+          />
+          <p className="settings__note">Alerts also show as a message at the top of the window.</p>
+        </fieldset>
+
+        <fieldset className="settings__group">
+          <legend>Keyboard</legend>
+          <ToggleRow
+            label="D to note a distraction"
+            hint="Press D anywhere to jump to the note box. Turn off if it gets in the way."
+            checked={settings.shortcut}
+            onChange={(shortcut) => onChange({ ...settings, shortcut })}
+          />
         </fieldset>
 
         <fieldset className="settings__group">
           <legend>Detections</legend>
           {DETECTIONS.map((d) => (
-            <label key={d.key} className="settings__row">
-              <span>
-                {d.label}
-                <small className="settings__hint">{d.hint}</small>
-              </span>
-              <input
-                type="checkbox"
-                checked={settings.detections[d.key]}
-                onChange={(e) => setDetection(d.key, e.target.checked)}
-              />
-            </label>
+            <ToggleRow
+              key={d.key}
+              label={d.label}
+              hint={d.hint}
+              checked={settings.detections[d.key]}
+              onChange={(on) => setDetection(d.key, on)}
+            />
           ))}
           <p className="settings__note">
             Camera checks run during a focus session while the camera is on. The focus score needs
@@ -112,7 +124,7 @@ export function SettingsPanel({ settings, onChange }: Props) {
 
         <fieldset className="settings__group">
           <legend>Sensitivity</legend>
-          <div className="settings__segmented" role="radiogroup" aria-label="Sensitivity">
+          <div className="settings__segmented">
             {SENSITIVITIES.map((s) => (
               <label key={s.value}>
                 <input
@@ -144,6 +156,36 @@ export function SettingsPanel({ settings, onChange }: Props) {
   )
 }
 
+interface ToggleRowProps {
+  label: string
+  hint: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}
+
+// The whole row toggles the checkbox. Screen readers get the label as its name and the hint
+// as its description, rather than both run together as one long name.
+function ToggleRow({ label, hint, checked, onChange }: ToggleRowProps) {
+  const id = useId()
+  return (
+    <label className="settings__row">
+      <span>
+        <span id={`${id}-label`}>{label}</span>
+        <small id={`${id}-hint`} className="settings__hint">
+          {hint}
+        </small>
+      </span>
+      <input
+        type="checkbox"
+        checked={checked}
+        aria-labelledby={`${id}-label`}
+        aria-describedby={`${id}-hint`}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+    </label>
+  )
+}
+
 interface MinutesInputProps {
   label: string
   field: MinutesField
@@ -156,29 +198,41 @@ function MinutesInput({ label, field, value, onChange }: MinutesInputProps) {
   const [text, setText] = useState(String(value))
   const { min, max } = MINUTE_LIMITS[field]
   const valid = isValidMinutes(field, Number(text))
+  const errorId = useId()
 
   return (
-    <label className="settings__row">
-      <span>{label}</span>
-      <span className="settings__minutes">
-        <input
-          type="number"
-          inputMode="numeric"
-          min={min}
-          max={max}
-          step={1}
-          value={text}
-          aria-invalid={!valid}
-          onChange={(e) => {
-            setText(e.target.value)
-            const next = Number(e.target.value)
-            if (isValidMinutes(field, next)) onChange(next)
-          }}
-          // Leaving the box with an invalid number puts back the last saved value
-          onBlur={() => setText(String(value))}
-        />
-        min
-      </span>
-    </label>
+    <div className="settings__field">
+      <label className="settings__row">
+        <span>
+          {label}
+          <span className="visually-hidden"> in minutes</span>
+        </span>
+        <span className="settings__minutes">
+          <input
+            type="number"
+            inputMode="numeric"
+            min={min}
+            max={max}
+            step={1}
+            value={text}
+            aria-invalid={!valid}
+            aria-describedby={valid ? undefined : errorId}
+            onChange={(e) => {
+              setText(e.target.value)
+              const next = Number(e.target.value)
+              if (isValidMinutes(field, next)) onChange(next)
+            }}
+            // Leaving the box with an invalid number puts back the last saved value
+            onBlur={() => setText(String(value))}
+          />
+          <span aria-hidden="true">min</span>
+        </span>
+      </label>
+      {!valid && (
+        <p id={errorId} className="settings__error">
+          Enter a whole number from {min} to {max}. Leaving the box keeps {value}.
+        </p>
+      )}
+    </div>
   )
 }

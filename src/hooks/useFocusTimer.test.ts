@@ -2,8 +2,11 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Session, Settings } from '../types'
+import { alertCue } from '../utils/alerts'
 import { DEFAULT_SETTINGS } from '../utils/storage'
 import { useFocusTimer } from './useFocusTimer'
+
+vi.mock('../utils/alerts', () => ({ alertCue: vi.fn() }))
 
 const MIN = 60_000
 const START = new Date(2026, 9, 29, 9, 0).getTime()
@@ -34,6 +37,7 @@ function timePassesInBackground(ms: number) {
 }
 
 beforeEach(() => {
+  vi.mocked(alertCue).mockClear()
   vi.useFakeTimers()
   vi.setSystemTime(START)
   localStorage.clear()
@@ -214,5 +218,48 @@ describe('useFocusTimer', () => {
 
     expect(result.current.session?.tabLeaves).toBe(1)
     expect(result.current.session?.awayMs).toBe(2 * MIN)
+  })
+
+  describe('when a phase runs out', () => {
+    it('alerts and reports which phase ended, until you act', () => {
+      const { result } = setup()
+      act(() => result.current.start('x'))
+      expect(result.current.phaseEnded).toBeNull()
+
+      timePassesInBackground(25 * MIN)
+      expect(result.current.phase).toBe('break')
+      expect(result.current.phaseEnded).toBe('focus')
+      expect(alertCue).toHaveBeenCalledTimes(1)
+
+      timePassesInBackground(5 * MIN)
+      expect(result.current.phase).toBe('idle')
+      expect(result.current.phaseEnded).toBe('break')
+      expect(alertCue).toHaveBeenCalledTimes(2)
+
+      act(() => result.current.start('y'))
+      expect(result.current.phaseEnded).toBeNull()
+    })
+
+    it('can be dismissed', () => {
+      const { result } = setup()
+      act(() => result.current.start('x'))
+      timePassesInBackground(25 * MIN)
+      act(() => result.current.dismissPhaseEnded())
+      expect(result.current.phaseEnded).toBeNull()
+      expect(result.current.phase).toBe('break')
+    })
+
+    it('stays quiet when you skip or stop, or catch up on a phase that ended long ago', () => {
+      const { result } = setup()
+      act(() => result.current.start('x'))
+      act(() => result.current.skip())
+      act(() => result.current.stop())
+      expect(result.current.phaseEnded).toBeNull()
+
+      act(() => result.current.start('x'))
+      timePassesInBackground(3 * 60 * MIN)
+      expect(result.current.phaseEnded).toBeNull()
+      expect(alertCue).not.toHaveBeenCalled()
+    })
   })
 })

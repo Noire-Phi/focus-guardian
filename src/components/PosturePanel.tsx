@@ -1,5 +1,7 @@
+import { useRef } from 'react'
 import type { TrackerStatus } from '../hooks/useFaceTracker'
 import type { PostureCalibrationStep } from '../hooks/usePostureCalibration'
+import { useRestoreFocus } from '../hooks/useRestoreFocus'
 import type { RunPhase } from '../utils/calibration'
 import type { PostureIssue, PostureMetrics, PostureReading } from '../utils/posture'
 import { formatDuration } from '../utils/time'
@@ -30,16 +32,26 @@ interface Props {
 
 export function PosturePanel(props: Props) {
   const { baseline, cameraOn, step } = props
+  // Same as the gaze calibration: keep focus on this panel as its buttons come and go
+  const ref = useRef<HTMLDivElement>(null)
+  useRestoreFocus(ref, step === 'recording' ? null : 'button:not(:disabled)')
 
   if (step === 'recording') {
     return (
-      <div className="calibration calibration--active" role="status">
+      <div ref={ref} tabIndex={-1} className="calibration calibration--active" role="status">
         <p className="calibration__step">Good posture</p>
         <p>
           Sit up the way you want to sit: back straight, shoulders relaxed, head level, both
           shoulders in view. Keep still.
         </p>
-        <div className="calibration__bar" aria-hidden="true">
+        <div
+          className="calibration__bar"
+          role="progressbar"
+          aria-label="Posture calibration progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(props.progress * 100)}
+        >
           <div
             className="calibration__fill"
             style={{ width: `${Math.round(props.progress * 100)}%` }}
@@ -62,7 +74,7 @@ export function PosturePanel(props: Props) {
   }
 
   return (
-    <div className="calibration">
+    <div ref={ref} tabIndex={-1} className="calibration">
       <h3 className="calibration__title">Posture</h3>
       {!props.enabled && (
         <p className="calibration__summary">The posture check is off in Settings.</p>

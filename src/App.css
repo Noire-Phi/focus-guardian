@@ -96,7 +96,7 @@
   font-size: var(--text-md);
   color: var(--color-text-strong);
   background: var(--color-surface);
-  border: var(--border-width) solid var(--color-border-strong);
+  border: var(--border-width) solid var(--color-border-control);
   border-radius: var(--radius-md);
   transition: border-color var(--duration-fast);
 }
@@ -144,12 +144,13 @@
     color var(--duration-fast);
 }
 
+/* Selected: raised, with an edge strong enough to see without relying on the fill */
 .segmented button[aria-pressed='true'],
 .study-mode__option input:checked + span,
 .settings__segmented input:checked + span {
   color: var(--color-text-strong);
   background: var(--color-surface);
-  box-shadow: 0 0 0 var(--border-width) var(--color-border);
+  box-shadow: 0 0 0 var(--border-width) var(--color-border-control);
 }
 
 .study-mode__option,
@@ -169,7 +170,18 @@
 
 .study-mode__option input:focus-visible + span,
 .settings__segmented input:focus-visible + span {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
   box-shadow: var(--focus-ring);
+}
+
+/* High contrast mode drops backgrounds and shadows: mark the selected segment with an outline */
+@media (forced-colors: active) {
+  .segmented button[aria-pressed='true'],
+  .study-mode__option input:checked + span,
+  .settings__segmented input:checked + span {
+    outline: 2px solid Highlight;
+  }
 }
 
 /* One-line status under the camera: muted, good, or needs attention */
@@ -627,6 +639,21 @@
   box-shadow: var(--shadow-float);
 }
 
+/* The end of a phase: the on-screen version of the chime */
+.attention-alert--phase {
+  pointer-events: auto;
+  border-left-color: var(--color-accent);
+}
+
+.attention-alert--break {
+  border-left-color: var(--color-success);
+}
+
+.attention-alert__dismiss {
+  align-self: flex-start;
+  margin-top: var(--space-1);
+}
+
 .attention-alert strong {
   font-size: var(--text-md);
   color: var(--color-text-strong);
@@ -650,14 +677,18 @@
   display: none;
 }
 
+/* The text after the slash is what screen readers say: nothing, as the summary is already
+   announced as expanded or collapsed */
 .settings summary::after {
   content: '+';
+  content: '+' / '';
   margin-left: var(--space-2);
   font-weight: var(--weight-semibold);
 }
 
 .settings[open] summary::after {
   content: '−';
+  content: '−' / '';
 }
 
 .settings__body {
@@ -716,6 +747,17 @@
 
 .settings__minutes input[aria-invalid='true'] {
   border-color: var(--color-danger);
+}
+
+.settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.settings__error {
+  font-size: var(--text-xs);
+  color: var(--color-danger);
 }
 
 .settings__row input[type='checkbox'] {

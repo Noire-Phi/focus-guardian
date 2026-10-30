@@ -2,21 +2,27 @@ import { useEffect, useRef, useState } from 'react'
 import type { Distraction } from '../types'
 import { formatDuration, formatTimeOfDay } from '../utils/time'
 
-// Pressing this key anywhere (outside a text field) jumps to the note box
+// Pressing this key anywhere (outside a text field) jumps to the note box. A single-key
+// shortcut can be set off by speech input, so it can be turned off in Settings.
 const SHORTCUT_KEY = 'd'
 
 interface Props {
   distractions: Distraction[]
   tabLeaves: number
   awayMs: number
+  /** The D shortcut is on (Settings) */
+  shortcut: boolean
   onAdd: (note: string) => void
 }
 
-export function DistractionLog({ distractions, tabLeaves, awayMs, onAdd }: Props) {
+export function DistractionLog({ distractions, tabLeaves, awayMs, shortcut, onAdd }: Props) {
   const [note, setNote] = useState('')
+  // Read out by screen readers after logging, since nothing else announces it
+  const [logged, setLogged] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    if (!shortcut) return
     function handleKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement
       const typing =
@@ -28,12 +34,13 @@ export function DistractionLog({ distractions, tabLeaves, awayMs, onAdd }: Props
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [shortcut])
 
   function submit() {
     // An empty note is fine: logging fast matters more than describing it
     onAdd(note.trim())
     setNote('')
+    setLogged(`Distraction ${distractions.length + 1} logged.`)
   }
 
   return (
@@ -51,14 +58,19 @@ export function DistractionLog({ distractions, tabLeaves, awayMs, onAdd }: Props
           type="text"
           value={note}
           maxLength={120}
-          placeholder="Got distracted? Note it (press D)"
+          placeholder={shortcut ? 'Got distracted? Note it (press D)' : 'Got distracted? Note it'}
           aria-label="Distraction note"
+          aria-keyshortcuts={shortcut ? 'D' : undefined}
           onChange={(e) => setNote(e.target.value)}
         />
         <button type="submit" className="button">
           Log
         </button>
       </form>
+
+      <p className="visually-hidden" role="status">
+        {logged}
+      </p>
 
       <p className="distractions__summary">
         {tabLeaves === 0
