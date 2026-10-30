@@ -262,4 +262,34 @@ describe('useFocusTimer', () => {
       expect(alertCue).not.toHaveBeenCalled()
     })
   })
+
+  describe('during a session', () => {
+    it('adds up camera time sent in batches, including from timers (functional update)', () => {
+      const { result } = setup()
+      act(() => result.current.start('x'))
+      act(() => {
+        result.current.recordCamera({ checkedMs: 1000, focusedMs: 800 })
+        result.current.recordCamera({ checkedMs: 1000, focusedMs: 1000 })
+      })
+      expect(result.current.session?.camera).toMatchObject({ checkedMs: 2000, focusedMs: 1800 })
+    })
+
+    it('logs distractions with the time and note', () => {
+      const { result } = setup()
+      act(() => result.current.start('x'))
+      vi.setSystemTime(START + 3 * MIN)
+      act(() => result.current.addDistraction('phone'))
+      expect(result.current.session?.distractions).toEqual([{ at: START + 3 * MIN, note: 'phone' }])
+    })
+
+    it('ignores camera time and distractions when no session is running', () => {
+      const { result } = setup()
+      act(() => {
+        result.current.recordCamera({ checkedMs: 1000 })
+        result.current.addDistraction('phone')
+      })
+      expect(result.current.session).toBeNull()
+      expect(result.current.phase).toBe('idle')
+    })
+  })
 })
