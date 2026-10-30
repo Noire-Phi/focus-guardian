@@ -7,7 +7,10 @@ import type {
 } from '@mediapipe/tasks-vision'
 import { useEffect, useEffectEvent, useRef, useState, type RefObject } from 'react'
 import { ATTENTION, type Blendshapes, type Face, type ObjectScores } from '../utils/attention'
+import { nextCheckDelay, pickExtraCheck } from '../utils/detectionSchedule'
+import { countEvent, recordTiming } from '../utils/perfStats'
 import { POSTURE, type Landmark } from '../utils/posture'
+import { usePageVisible } from './usePageVisible'
 
 // MediaPipe's runtime and models are fetched the first time they're needed, not with the
 // app. Only these files are downloaded; video frames never leave your device.
@@ -196,10 +199,12 @@ function useOptionalModel<T>(active: boolean, wanted: boolean, load: () => Promi
 }
 
 /**
- * Runs MediaPipe on the video while `active`: Face Landmarker every 200 ms; when
- * `detectObjects` is on, the object detector at most every 500 ms; when `detectPose` is
- * on, Pose Landmarker at most every 500 ms. Each result goes to `onFrame`. The judging
- * (focused or not, posture, calibration) happens in the hooks that receive the frames.
+ * Runs MediaPipe on the video while `active` and the tab is visible: Face Landmarker every
+ * 200 ms; when `detectObjects` is on, the object detector about every 500 ms; when
+ * `detectPose` is on, Pose Landmarker about every 500 ms, never both on the same check.
+ * Slow checks push the next one back (utils/detectionSchedule.ts). Each result goes to
+ * `onFrame`. The judging (focused or not, posture, calibration) happens in the hooks that
+ * receive the frames.
  */
 export function useFaceTracker(
   videoRef: RefObject<HTMLVideoElement | null>,
@@ -215,6 +220,7 @@ export function useFaceTracker(
     onFrame: (frame: TrackerFrame) => void
   },
 ) {
+  const visible = usePageVisible()
   const face = useOptionalModel(active, true, loadFaceLandmarker)
   const objects = useOptionalModel(active, detectObjects, loadObjectDetector)
   const pose = useOptionalModel(active, detectPose, loadPoseLandmarker)
@@ -230,31 +236,43 @@ export function useFaceTracker(
 
   const check = useEffectEvent(
     (model: FaceLandmarker, last: { frameTime: number; objectsAt: number; poseAt: number }) => {
-      if (document.hidden) {
-        onFrame({ at: Date.now(), hidden: true, face: null, objects: null, pose: null })
-        return
-      }
+      // The loop stops when the tab is hidden; this covers the moment before it does
+      if (document.hidden) return
       const video = videoRef.current
       // No new frame since the last check: nothing to do
       if (!video || video.readyState < 2 || video.currentTime === last.frameTime) return
       last.frameTime = video.currentTime
 
-      const faceResult = toFace(model.detectForVideo(video, performance.now()))
+      const started = performance.now()
+      const faceResult = toFace(model.detectForVideo(video, started))
+      recordTiming('face', performance.now() - started)
+
+      const detector = objectModelRef.current
+      const poser = poseModelRef.current
+      const extra = pickExtraCheck(
+        Date.now(),
+        { lastAt: last.objectsAt, everyMs: ATTENTION.objectCheckEveryMs, wanted: !!detector },
+        { lastAt: last.poseAt, everyMs: POSTURE.checkEveryMs, wanted: !!poser },
+      )
 
       let objectScores: ObjectScores | null = null
-      const detector = objectModelRef.current
-      if (detector && Date.now() - last.objectsAt >= ATTENTION.objectCheckEveryMs) {
-        objectScores = toObjectScores(detector.detectForVideo(video, performance.now()))
+      if (detector && extra === 'objects') {
+        const t = performance.now()
+        objectScores = toObjectScores(detector.detectForVideo(video, t))
+        recordTiming('objects', performance.now() - t)
         last.objectsAt = Date.now()
       }
 
       let poseResult: TrackerFrame['pose'] = null
-      const poser = poseModelRef.current
-      if (poser && Date.now() - last.poseAt >= POSTURE.checkEveryMs) {
-        const result = poser.detectForVideo(video, performance.now())
+      if (poser && extra === 'pose') {
+        const t = performance.now()
+        const result = poser.detectForVideo(video, t)
+        recordTiming('pose', performance.now() - t)
         poseResult = { landmarks: result.landmarks[0] ?? null }
         last.poseAt = Date.now()
       }
+
+      recordTiming('check', performance.now() - started)
 
       // Timed after detecting, so a slow frame can't make being away seem longer
       onFrame({
@@ -272,19 +290,32 @@ export function useFaceTracker(
   const ready = face.model !== null && objects.settled && pose.settled
   const faceModel = face.model
 
-  // Check a frame every 200 ms. Each check is scheduled after the previous one finishes,
-  // so slow frames can never pile up.
+  // One "hidden" frame when the tab is hidden, so the checks reset instead of counting the
+  // time away (the tab guard counts that)
+  const reportHidden = useEffectEvent(() => {
+    countEvent('hiddenPause')
+    onFrame({ at: Date.now(), hidden: true, face: null, objects: null, pose: null })
+  })
+
+  // Check a frame every 200 ms, or less often if checks are slow on this computer. Each check
+  // is scheduled after the previous one finishes, so slow frames can never pile up. Nothing
+  // runs while the tab is hidden: there's nothing to see, and it would only use battery.
   useEffect(() => {
     if (!active || !ready || !faceModel) return
+    if (!visible) {
+      reportHidden()
+      return
+    }
     const last = { frameTime: -1, objectsAt: -Infinity, poseAt: -Infinity }
     let timer: ReturnType<typeof setTimeout>
     const loop = () => {
+      const started = performance.now()
       check(faceModel, last)
-      timer = setTimeout(loop, ATTENTION.checkEveryMs)
+      timer = setTimeout(loop, nextCheckDelay(performance.now() - started, ATTENTION.checkEveryMs))
     }
     timer = setTimeout(loop, ATTENTION.checkEveryMs)
     return () => clearTimeout(timer)
-  }, [active, ready, faceModel])
+  }, [active, ready, faceModel, visible])
 
   const status: TrackerStatus = !active
     ? 'off'

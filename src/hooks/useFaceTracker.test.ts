@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { poseMatrix } from '../utils/poseMatrix.testutil'
 import { resetModelsForTests, useFaceTracker, type TrackerFrame } from './useFaceTracker'
@@ -51,6 +51,15 @@ function makeVideo() {
   return video
 }
 
+/** Hides or shows the tab, as switching tabs or minimising the window does. */
+function setVisible(visible: boolean) {
+  vi.spyOn(document, 'hidden', 'get').mockReturnValue(!visible)
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue(visible ? 'visible' : 'hidden')
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+}
+
 async function wait(ms: number) {
   await act(async () => {
     await vi.advanceTimersByTimeAsync(ms)
@@ -91,6 +100,9 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // Unmount every hook, so no test's loop is still listening when the next one runs
+  cleanup()
+  vi.restoreAllMocks()
   vi.useRealTimers()
 })
 
@@ -223,14 +235,32 @@ describe('useFaceTracker', () => {
     expect(frames).toHaveLength(2)
   })
 
-  it('reports hidden tabs without running detection', async () => {
+  it('never runs the object detector and Pose on the same check', async () => {
+    const { frames } = await setup({ detectObjects: true, detectPose: true })
+    await wait(3000)
+    expect(mp.detectFace).toHaveBeenCalledTimes(15)
+    expect(frames.some((f) => f.objects && f.pose)).toBe(false)
+    // Each still runs about every 600 ms
+    expect(mp.detectObjects).toHaveBeenCalledTimes(5)
+    expect(mp.detectPose).toHaveBeenCalledTimes(5)
+  })
+
+  it('stops completely while the tab is hidden, and starts again when it is back', async () => {
     const { frames } = await setup()
-    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
-    await wait(600)
-    expect(mp.detectFace).not.toHaveBeenCalled()
+    await wait(400)
+    expect(frames).toHaveLength(2)
+
+    setVisible(false)
+    await wait(5000)
+    // One "hidden" frame so the checks reset, then nothing at all: no detection, no wake-ups
     expect(frames).toHaveLength(3)
-    expect(frames.every((f) => f.hidden)).toBe(true)
-    hidden.mockRestore()
+    expect(frames[2].hidden).toBe(true)
+    expect(mp.detectFace).toHaveBeenCalledTimes(2)
+
+    setVisible(true)
+    await wait(1000)
+    expect(mp.detectFace).toHaveBeenCalledTimes(7)
+    expect(frames.at(-1)?.hidden).toBe(false)
   })
 
   it('stops checking when made inactive', async () => {
