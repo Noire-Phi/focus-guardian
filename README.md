@@ -10,7 +10,8 @@ slouch, and tells you, without the video ever leaving your computer.
 
 > **Demo GIF:** coming soon.
 
-**Live demo:** not deployed yet. <!-- Replace with the URL once it's hosted. -->
+**Live demo:** [noire-phi.github.io/focus-guardian](https://noire-phi.github.io/focus-guardian/)
+(allow camera access when asked; it's only used in your browser).
 
 ## Features
 
@@ -47,6 +48,7 @@ slouch, and tells you, without the video ever leaving your computer.
 | Storage   | `localStorage`, versioned, with backups of anything it can't read                                     |
 | Testing   | Vitest and Testing Library (367 tests, about 97% line coverage)                                       |
 | Quality   | ESLint, Prettier, and GitHub Actions on every push                                                    |
+| Hosting   | GitHub Pages, deployed automatically when `main` passes its checks                                    |
 
 No backend, no account, no analytics.
 
@@ -147,4 +149,4 @@ camera; hooks connect them to React, and components only display.
 - **System notifications** when a phase ends while you're in another app, as an option.
 - **Test with screen readers** (NVDA, VoiceOver). The accessibility work was checked in code
   and the browser, not with assistive technology.
-- **Check Firefox and Safari**, and deploy a live version.
+- **Check Firefox and Safari.**
