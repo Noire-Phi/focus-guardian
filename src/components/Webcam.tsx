@@ -17,6 +17,7 @@ import { formatDuration } from '../utils/time'
 import { AttentionStatus } from './AttentionStatus'
 import { CalibrationPanel } from './CalibrationPanel'
 import { PosturePanel } from './PosturePanel'
+import { PrivacyNote } from './PrivacyNote'
 import { StudyModePicker } from './StudyModePicker'
 
 interface Props {
@@ -213,6 +214,8 @@ export function Webcam({ watchAttention, settings, alertRoot, onCameraStats }: P
         onCancel={calibratePosture.cancel}
         onDismiss={calibratePosture.dismiss}
       />
+
+      <PrivacyNote />
 
       {/* Shown in the app's alert stack, so they're seen on the dashboard too */}
       {alertRoot &&
