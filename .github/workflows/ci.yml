@@ -1,19 +1,23 @@
 # Checks every push and pull request: formatting, lint, types and tests.
 # The same commands work locally: npm run format:check, lint, typecheck, test.
-name: CI
+# Pushes to main that pass are then published to GitHub Pages.
+name: CI and deploy
 
 on:
   push:
   pull_request:
+  # Run it by hand from the Actions tab, e.g. to redeploy main
+  workflow_dispatch:
 
-# Read-only: CI only checks code, it never writes to the repository
+# Read-only by default; only the deploy job gets more
 permissions:
   contents: read
 
-# A newer push to the same branch replaces a run still in progress
+# A newer push to a branch replaces a run still in progress, except on main, where a
+# deploy is never cut off halfway
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   check:
@@ -41,3 +45,44 @@ jobs:
 
       - name: Test
         run: npm test
+
+  # Main only, and only once the checks pass
+  build-site:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The site is served from /<repo name>/, not the domain root
+      - name: Build
+        run: npm run build -- --base=/${{ github.event.repository.name }}/
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build-site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
