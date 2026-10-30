@@ -8,8 +8,8 @@ Code: `utils/focusScore.ts` (the formula, a pure function) and `utils/focusScore
 ## What's measured during a session
 
 While the camera's focus check runs, every check stands for the time since the previous
-one (normally 200 ms for the face, about 600 ms for posture, capped at 1 s and 1.5 s so a
-gap is never counted as one long reading). That time is added up into:
+one (normally 200 ms for the face, about 600 ms for posture; capped at 2.5 s and 5 s, which
+leaves room for a slow computer's longer gaps but never counts a stall as one long reading). That time is added up into:
 
 | Measured           | Meaning                                                                                                   |
 | ------------------ | --------------------------------------------------------------------------------------------------------- |

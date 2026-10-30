@@ -5,13 +5,16 @@ that reads or writes it. Tests: `utils/storage.test.ts`.
 
 ## What's saved
 
-| Key                        | Contents                                                   |
-| -------------------------- | ---------------------------------------------------------- |
-| `focus-guardian:sessions`  | Every finished focus session (history, focus score inputs) |
-| `focus-guardian:timer`     | The running timer and the session in progress              |
-| `focus-guardian:settings`  | Focus/break lengths and sound                              |
-| `focus-guardian:attention` | Study mode, screen/book calibration, good-posture baseline |
-| `focus-guardian:backup:…`  | Copies of data that couldn't be read (see below)           |
+| Key                        | Contents                                                                   |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `focus-guardian:sessions`  | Every finished focus session (history, focus score inputs)                 |
+| `focus-guardian:timer`     | The running timer and the session in progress                              |
+| `focus-guardian:settings`  | Timer lengths, checks on/off, sensitivity, sound, flash, theme, D shortcut |
+| `focus-guardian:attention` | Study mode, screen/book calibration, good-posture baseline                 |
+| `focus-guardian:backup:…`  | Copies of data that couldn't be read (see below)                           |
+
+One flag is kept in `sessionStorage` instead (this tab only, gone when it closes):
+`focus-guardian:camera-on`, so a refresh can turn the camera back on (`hooks/useWebcam.ts`).
 
 Each session is added to the history as it finishes (completed, stopped or skipped), and
 the history is saved straight away.
