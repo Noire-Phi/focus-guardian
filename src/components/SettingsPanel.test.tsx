@@ -16,7 +16,7 @@ function setup(settings: Settings = DEFAULT_SETTINGS) {
 describe('SettingsPanel', () => {
   it('turns a detection off, leaving the others alone', () => {
     const onChange = setup()
-    fireEvent.click(screen.getByRole('checkbox', { name: /Phone/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Phone' }))
     expect(onChange).toHaveBeenCalledWith({
       ...DEFAULT_SETTINGS,
       detections: { ...DEFAULT_SETTINGS.detections, phone: false },
@@ -25,8 +25,25 @@ describe('SettingsPanel', () => {
 
   it('turns the alert sound off', () => {
     const onChange = setup()
-    fireEvent.click(screen.getByRole('checkbox', { name: /Alert sound/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Alert sound' }))
     expect(onChange).toHaveBeenCalledWith({ ...DEFAULT_SETTINGS, sound: false })
+  })
+
+  it('names each switch by its label and describes it with its hint', () => {
+    setup()
+    const flash = screen.getByRole('checkbox', { name: 'Flash the screen' })
+    expect(flash.getAttribute('aria-describedby')).toBeTruthy()
+    expect(document.getElementById(flash.getAttribute('aria-describedby')!)?.textContent).toMatch(
+      /without the sound/,
+    )
+  })
+
+  it('turns on the screen flash and turns off the D shortcut', () => {
+    const onChange = setup()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Flash the screen' }))
+    expect(onChange).toHaveBeenCalledWith({ ...DEFAULT_SETTINGS, flash: true })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'D to note a distraction' }))
+    expect(onChange).toHaveBeenCalledWith({ ...DEFAULT_SETTINGS, shortcut: false })
   })
 
   it('changes sensitivity and explains the chosen level', () => {
@@ -41,6 +58,9 @@ describe('SettingsPanel', () => {
     const focus = screen.getByRole('spinbutton', { name: /Focus length/ })
     fireEvent.change(focus, { target: { value: '999' } })
     expect(onChange).not.toHaveBeenCalled()
+    // The reason is shown and tied to the box for screen readers
+    const error = document.getElementById(focus.getAttribute('aria-describedby')!)
+    expect(error?.textContent).toMatch(/from 1 to/)
     fireEvent.change(focus, { target: { value: '45' } })
     expect(onChange).toHaveBeenCalledWith({ ...DEFAULT_SETTINGS, focusMinutes: 45 })
   })
@@ -59,7 +79,11 @@ describe('SettingsPanel', () => {
       sensitivity: 'low',
       detections: { lookingAway: false, phone: false, posture: false, tabLeaves: false },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Reset to defaults' }))
+    const reset = screen.getByRole('button', { name: 'Reset to defaults' })
+    reset.focus()
+    fireEvent.click(reset)
     expect(onChange).toHaveBeenCalledWith(DEFAULT_SETTINGS)
+    // The form is rebuilt; focus stays on the (new) reset button
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Reset to defaults' }))
   })
 })

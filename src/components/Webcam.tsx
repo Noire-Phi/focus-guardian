@@ -10,8 +10,8 @@ import { useWebcam } from '../hooks/useWebcam'
 import type { CameraStats, Settings } from '../types'
 import { needsBookCalibration } from '../utils/attention'
 import { EMPTY_CAMERA_STATS, addCameraStats } from '../utils/focusScore'
+import { alertCue } from '../utils/alerts'
 import { tuningFor } from '../utils/sensitivity'
-import { playChime } from '../utils/sound'
 import { loadAttentionPrefs, saveAttentionPrefs } from '../utils/storage'
 import { formatDuration } from '../utils/time'
 import { AttentionStatus } from './AttentionStatus'
@@ -22,8 +22,10 @@ import { StudyModePicker } from './StudyModePicker'
 interface Props {
   /** Run the focus check (only while a focus session is running) */
   watchAttention: boolean
-  /** Alert sound, which checks are on, and how sensitive they are */
-  settings: Pick<Settings, 'sound' | 'detections' | 'sensitivity'>
+  /** Alert sound and flash, which checks are on, and how sensitive they are */
+  settings: Pick<Settings, 'sound' | 'flash' | 'detections' | 'sensitivity'>
+  /** Where alerts are shown (the app's alert stack at the top of the window) */
+  alertRoot?: HTMLElement | null
   /** Receives camera time for the focus score, about once a second */
   onCameraStats?: (delta: CameraStats) => void
 }
@@ -31,8 +33,8 @@ interface Props {
 // How often collected camera time is passed on to the session
 const FLUSH_EVERY_MS = 1000
 
-export function Webcam({ watchAttention, settings, onCameraStats }: Props) {
-  const { sound, detections } = settings
+export function Webcam({ watchAttention, settings, alertRoot, onCameraStats }: Props) {
+  const { detections } = settings
   const tuning = tuningFor(settings.sensitivity)
   const checkGaze = detections.lookingAway
   const checkPhone = detections.phone
@@ -73,9 +75,7 @@ export function Webcam({ watchAttention, settings, onCameraStats }: Props) {
     checkGaze,
     checkPhone,
     onMeasure: collect,
-    onAlert: () => {
-      if (sound) playChime()
-    },
+    onAlert: () => alertCue(settings),
   })
 
   const posture = usePosture({
@@ -83,9 +83,7 @@ export function Webcam({ watchAttention, settings, onCameraStats }: Props) {
     baseline: prefs.posture,
     rules: tuning.posture,
     onMeasure: collect,
-    onAlert: () => {
-      if (sound) playChime()
-    },
+    onAlert: () => alertCue(settings),
   })
 
   const tracker = useFaceTracker(videoRef, {
@@ -216,39 +214,46 @@ export function Webcam({ watchAttention, settings, onCameraStats }: Props) {
         onDismiss={calibratePosture.dismiss}
       />
 
-      {/* Fixed at the top of the window and rendered at the page root, so alerts are seen
-          wherever the page is scrolled, and on the dashboard too */}
-      {createPortal(
-        <div className="alert-stack">
-          {attention.alerting && (
-            <div className="attention-alert" role="alert">
-              {attention.phoneConfirmed ? (
-                <>
-                  <strong>Phone detected</strong>
-                  <span>Put your phone away to stay focused.</span>
-                </>
-              ) : (
-                <>
-                  <strong>Eyes back on your work</strong>
-                  <span>You’ve been distracted for {formatDuration(attention.awayMs)}.</span>
-                </>
-              )}
-            </div>
-          )}
-          {posture.alerting && (
-            <div className="attention-alert attention-alert--posture" role="alert">
-              <strong>Check your posture</strong>
-              <span>
-                {posture.reading?.status === 'bad'
-                  ? `${posture.reading.issues.includes('slouching') ? 'You’re slouching' : 'Your posture has drifted'}. `
-                  : ''}
-                Sit back up like when you calibrated.
-              </span>
-            </div>
-          )}
-        </div>,
-        document.body,
-      )}
+      {/* Shown in the app's alert stack, so they're seen on the dashboard too */}
+      {alertRoot &&
+        createPortal(
+          <>
+            {attention.alerting && (
+              <div className="attention-alert" role="alert">
+                {attention.phoneConfirmed ? (
+                  <>
+                    <strong>Phone detected</strong>
+                    <span>Put your phone away to stay focused.</span>
+                  </>
+                ) : (
+                  <>
+                    <strong>Eyes back on your work</strong>
+                    {/* The counter ticks every second; screen readers get one steady sentence
+                      instead of having it read out again with each change */}
+                    <span aria-hidden="true">
+                      You’ve been distracted for {formatDuration(attention.awayMs)}.
+                    </span>
+                    <span className="visually-hidden">
+                      You’ve been looking away from your work.
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+            {posture.alerting && (
+              <div className="attention-alert attention-alert--posture" role="alert">
+                <strong>Check your posture</strong>
+                <span>
+                  {posture.reading?.status === 'bad'
+                    ? `${posture.reading.issues.includes('slouching') ? 'You’re slouching' : 'Your posture has drifted'}. `
+                    : ''}
+                  Sit back up like when you calibrated.
+                </span>
+              </div>
+            )}
+          </>,
+          alertRoot,
+        )}
     </section>
   )
 }

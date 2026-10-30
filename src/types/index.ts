@@ -35,6 +35,10 @@ export interface Settings {
   focusMinutes: number
   breakMinutes: number
   sound: boolean
+  /** Flash the edges of the window with each alert: a visual alternative to the sound */
+  flash: boolean
+  /** Press D to jump to the distraction note (single-key shortcuts can be turned off) */
+  shortcut: boolean
   /** Which checks run during a focus session */
   detections: Detections
   /** How readily the checks flag a distraction (see utils/sensitivity.ts) */

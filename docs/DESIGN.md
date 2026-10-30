@@ -16,7 +16,8 @@ Each colour is one token with a light and a dark value, written with CSS `light-
 | `--color-bg`                           | `#f6f5f1`             | `#121311`             | Page background                                 |
 | `--color-surface`                      | `#ffffff`             | `#1b1c1a`             | Cards, inputs, buttons                          |
 | `--color-surface-sunken`               | `#efeee9`             | `#161715`             | Stat tiles, camera frame, idle timer            |
-| `--color-border` / `-strong`           | `#e3e1da` / `#cfccc3` | `#2c2d2a` / `#43443f` | Card edges / input and button edges             |
+| `--color-border` / `-strong`           | `#e3e1da` / `#cfccc3` | `#2c2d2a` / `#43443f` | Card edges / button edges                       |
+| `--color-border-control`               | `#8a867d`             | `#74756e`             | Input edges, the selected segment (3:1+)        |
 | `--color-text`                         | `#3b3a36`             | `#d4d2cb`             | Body text                                       |
 | `--color-text-strong`                  | `#171715`             | `#f4f3ef`             | Headings, values, button text                   |
 | `--color-text-muted`                   | `#6f6c64`             | `#9a978f`             | Hints, labels, secondary text                   |
@@ -36,7 +37,7 @@ Rules:
 
 ## Theme
 
-Settings → Appearance: **System** (default), **Light** or **Dark**. System follows the
+Settings → Theme: **System** (default), **Light** or **Dark**. System follows the
 operating system; Light and Dark set `data-theme` on `<html>`, which sets `color-scheme`
 and so which half of every `light-dark()` is used. The theme is applied before the first
 render, so a forced theme doesn't flash. Charts re-read the colours when the theme changes.
@@ -78,10 +79,14 @@ shadow is `--shadow-float`, on alerts.
 
 - `.card`: surface, border, large radius, `--space-5` padding.
 - `.button`, `.button--primary`, `.link-button`.
-- Text inputs share one style (40 px tall, strong border, accent border on focus).
+- Text inputs share one style (40 px tall, control border, accent border on focus).
 - Segmented controls (view switch, study mode, sensitivity, theme) share one style: a
   sunken track with the selected option raised to the surface.
-- Focus is always visible: a 2 px accent ring with a gap (`--focus-ring`).
+- Focus is always visible: a 2 px accent ring with a gap (`--focus-ring`), plus a
+  transparent outline so high contrast mode still shows it.
+- `.visually-hidden`: text for screen readers only.
+
+See [ACCESSIBILITY.md](ACCESSIBILITY.md) for contrast numbers, keyboard behaviour and alerts.
 
 ## Layout and breakpoints
 

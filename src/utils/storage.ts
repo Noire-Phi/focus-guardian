@@ -29,6 +29,8 @@ export const DEFAULT_SETTINGS: Settings = {
   focusMinutes: 25,
   breakMinutes: 5,
   sound: true,
+  flash: false,
+  shortcut: true,
   detections: { lookingAway: true, phone: true, posture: true, tabLeaves: true },
   sensitivity: 'medium',
   theme: 'system',
@@ -283,6 +285,8 @@ export function loadSettings(): Settings {
       ? data.breakMinutes
       : DEFAULT_SETTINGS.breakMinutes,
     sound: typeof data.sound === 'boolean' ? data.sound : DEFAULT_SETTINGS.sound,
+    flash: typeof data.flash === 'boolean' ? data.flash : DEFAULT_SETTINGS.flash,
+    shortcut: typeof data.shortcut === 'boolean' ? data.shortcut : DEFAULT_SETTINGS.shortcut,
     // Missing in settings saved before these existed: every check on, medium sensitivity
     detections: loadDetections(data.detections),
     sensitivity: SENSITIVITIES.includes(data.sensitivity as Sensitivity)

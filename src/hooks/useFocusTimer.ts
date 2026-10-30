@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useState } from 'react'
 import type { CameraStats, Session, Settings } from '../types'
-import { playChime } from '../utils/sound'
+import { alertCue } from '../utils/alerts'
+import type { EndedPhase } from '../utils/phaseEnd'
 import { loadTimerState, saveTimerState } from '../utils/storage'
 import * as timer from '../utils/timer'
 import { useTabGuard } from './useTabGuard'
@@ -25,6 +26,9 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
   })
   // The time of the last tick. Kept in state so rendering never reads the clock itself.
   const [now, setNow] = useState(() => Date.now())
+  // The phase that just ran out on its own, until you act or dismiss it: shown and announced,
+  // so the end of a phase isn't only a sound
+  const [phaseEnded, setPhaseEnded] = useState<EndedPhase | null>(null)
 
   const running = timer.isRunning(state)
 
@@ -38,9 +42,12 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
     const t = Date.now()
     setNow(t)
     const transition = timer.advance(state, settings, t)
-    // Chime when a phase just ended, but not when catching up on one that ended long ago
+    // Alert when a phase just ended, but not when catching up on one that ended long ago
     const justEnded = state.endsAt !== null && t - state.endsAt < CHIME_WINDOW_MS
-    if (settings.sound && transition.state.phase !== state.phase && justEnded) playChime()
+    if (transition.state.phase !== state.phase && justEnded && state.phase !== 'idle') {
+      alertCue(settings)
+      setPhaseEnded(state.phase)
+    }
     apply(transition)
   })
 
@@ -67,9 +74,11 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
   )
 
   // Each action updates `now` too, so the display is right before the next tick arrives
+  // Acting on the timer also clears the "phase ended" notice: you've seen it
   function act(update: (t: number) => void) {
     const t = Date.now()
     setNow(t)
+    setPhaseEnded(null)
     update(t)
   }
 
@@ -79,6 +88,9 @@ export function useFocusTimer(settings: Settings, onSessionEnd: (session: Sessio
     now,
     remainingMs: timer.displayRemainingMs(state, settings, now),
     isPaused: timer.isPaused(state),
+    /** 'focus' or 'break' when that phase just ran out by itself; null once you act */
+    phaseEnded,
+    dismissPhaseEnded: () => setPhaseEnded(null),
     /** Adds camera time to the session in progress (functional update: safe from timers) */
     recordCamera: (delta: Partial<CameraStats>) => setState((s) => timer.addCameraTime(s, delta)),
     addDistraction: (note: string) => setState(timer.addDistraction(state, Date.now(), note)),

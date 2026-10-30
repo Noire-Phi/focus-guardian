@@ -16,7 +16,10 @@ export function IntentionInput({ value, onChange, onSubmit }: Props) {
         placeholder="e.g. Write the project plan"
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') onSubmit()
+          if (e.key !== 'Enter') return
+          // Starting moves focus to the Pause button; without this, the same Enter would press it
+          e.preventDefault()
+          onSubmit()
         }}
       />
     </label>

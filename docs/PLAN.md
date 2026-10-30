@@ -19,7 +19,8 @@ No backend and no accounts. Everything runs in the browser and is saved in `loca
    without stopping the timer.
 5. **Today's summary**: finished sessions, total focus time, and the number of distractions
    for the current day.
-6. **Settings**: session/break lengths and the end-of-session sound on/off.
+6. **Settings**: session/break lengths and the end-of-session sound on/off. (Later also
+   detections, sensitivity, theme, a screen flash and the D shortcut; see ACCESSIBILITY.md.)
 
 **Added after v1**: a camera focus check with study modes (Screen, Book/Paper, Mixed),
 calibration, and book/phone detection. See [ATTENTION.md](ATTENTION.md).
