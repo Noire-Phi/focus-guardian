@@ -1,3 +1,4 @@
 # Keep LF line endings to match Prettier, even with core.autocrlf on Windows
 * text=auto eol=lf
 *.png binary
+*.cmd text eol=crlf

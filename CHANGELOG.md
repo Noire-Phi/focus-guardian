@@ -11,6 +11,8 @@ Notable changes to Focus Guardian. The format follows
 - MIT license.
 - An app icon (browser tab and home screen) and a preview image, with description and
   Open Graph tags so links to the site show a title, summary and picture.
+- `start.cmd`: double-click on Windows to install what's needed, start the app and open it in
+  the browser. `npm start` does the same on any system once the packages are installed.
 
 ## [1.0.0] - 2026-10-30
 

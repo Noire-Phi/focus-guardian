@@ -108,13 +108,20 @@ npm ci
 npm run dev
 ```
 
-Then open http://localhost:5173. Browsers only allow the camera on `localhost` or `https://`
+Then open http://localhost:5173, or use `npm start` to open it for you.
+
+**On Windows**, you can double-click `start.cmd` in the project folder instead. It installs
+the packages when needed (the first time, and after `package-lock.json` changes), starts the
+app and opens it in your browser. Close its window to stop the app.
+
+Browsers only allow the camera on `localhost` or `https://`
 pages, so use that address rather than your machine's IP. The app was developed and tested in
 Chromium-based browsers (Chrome, Edge).
 
 | Command                 | What it does                                  |
 | ----------------------- | --------------------------------------------- |
 | `npm run dev`           | Development server with hot reload            |
+| `npm start`             | The same, and opens it in your browser        |
 | `npm run build`         | Type-check and build to `dist/`               |
 | `npm run preview`       | Serve the built app locally                   |
 | `npm test`              | Run the tests once                            |
